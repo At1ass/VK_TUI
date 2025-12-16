@@ -1,0 +1,41 @@
+[package]
+name = "vk-tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Terminal User Interface client for VKontakte"
+
+[[bin]]
+name = "vk-tui"
+path = "src/main.rs"
+
+[dependencies]
+# VK API library
+vk-api = { path = "../vk-api" }
+
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+
+# TUI framework
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Config management
+directories = "6"
+toml = "0.8"
+
+# Async channels
+tokio-stream = "0.1"
+futures = "0.3"
+
+# Utils
+open = "5"
+unicode-width = "0.2"
+time = { version = "0.3", features = ["formatting", "macros"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

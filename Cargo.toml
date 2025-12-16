@@ -1,0 +1,22 @@
+[workspace]
+members = ["vk-api", "vk-tui"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["at1ass"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/at1ass/vk_tui"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
