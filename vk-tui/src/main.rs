@@ -582,10 +582,8 @@ async fn main() -> Result<()> {
                         // Periodic updates
                     }
                     Event::Key(key) => {
-                        // Determine if we're in input mode
-                        let in_input = app.screen == app::Screen::Auth
-                            || (app.screen == app::Screen::Main && app.focus == app::Focus::Input);
-                        let msg = Message::from_key_event(key, in_input);
+                        // Convert key event to message based on current mode and focus
+                        let msg = Message::from_key_event(key, app.mode, app.focus, app.show_help);
                         let mut current_msg = Some(msg);
 
                         // Process message chain

@@ -25,6 +25,18 @@ pub enum Focus {
     Input,
 }
 
+/// Vi-like input mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mode {
+    /// Normal mode - navigation and commands
+    #[default]
+    Normal,
+    /// Insert mode - text input
+    Insert,
+    /// Command mode - : commands
+    Command,
+}
+
 impl Focus {
     pub fn next(self) -> Self {
         match self {
@@ -85,6 +97,8 @@ pub struct App {
     pub screen: Screen,
     /// Currently focused panel
     pub focus: Focus,
+    /// Current vi-like mode
+    pub mode: Mode,
 
     // Auth state
     /// Auth manager
@@ -121,11 +135,19 @@ pub struct App {
     /// Cursor position in input
     pub input_cursor: usize,
 
+    // Command mode state
+    /// Command input (for : commands)
+    pub command_input: String,
+    /// Command cursor position
+    pub command_cursor: usize,
+
     // UI state
     /// Status message (errors, info)
     pub status: Option<String>,
     /// Is loading data
     pub is_loading: bool,
+    /// Show help popup
+    pub show_help: bool,
 
     // Async action sender
     pub action_tx: Option<mpsc::UnboundedSender<AsyncAction>>,
@@ -174,6 +196,7 @@ impl Default for App {
             running_state: RunningState::Running,
             screen: Screen::Auth,
             focus: Focus::ChatList,
+            mode: Mode::Normal,
             auth: AuthManager::default(),
             token_input: String::new(),
             token_cursor: 0,
@@ -187,8 +210,11 @@ impl Default for App {
             messages_scroll: 0,
             input: String::new(),
             input_cursor: 0,
+            command_input: String::new(),
+            command_cursor: 0,
             status: None,
             is_loading: false,
+            show_help: false,
             action_tx: None,
         }
     }
@@ -764,9 +790,287 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
             app.status = Some(err);
         }
+
+        // === Mode transitions ===
+        Message::EnterNormalMode => {
+            app.mode = Mode::Normal;
+            // When leaving Insert mode, move focus to Messages
+            if app.focus == Focus::Input {
+                app.focus = Focus::Messages;
+            }
+            // Clear command input when leaving Command mode
+            app.command_input.clear();
+            app.command_cursor = 0;
+        }
+
+        Message::EnterInsertMode => {
+            app.mode = Mode::Insert;
+            // Move focus to Input panel
+            app.focus = Focus::Input;
+        }
+
+        Message::EnterCommandMode => {
+            app.mode = Mode::Command;
+            app.command_input.clear();
+            app.command_cursor = 0;
+        }
+
+        // === Command mode input ===
+        Message::CommandChar(c) => {
+            if app.mode == Mode::Command {
+                insert_char_at(&mut app.command_input, app.command_cursor, c);
+                app.command_cursor += 1;
+            }
+        }
+
+        Message::CommandBackspace => {
+            if app.mode == Mode::Command && app.command_cursor > 0 {
+                app.command_cursor -= 1;
+                remove_char_at(&mut app.command_input, app.command_cursor);
+            }
+        }
+
+        Message::CommandDeleteWord => {
+            if app.mode == Mode::Command {
+                // Delete whitespace
+                while app.command_cursor > 0
+                    && char_at(&app.command_input, app.command_cursor - 1)
+                        .is_some_and(|c| c.is_whitespace())
+                {
+                    app.command_cursor -= 1;
+                    remove_char_at(&mut app.command_input, app.command_cursor);
+                }
+                // Delete word
+                while app.command_cursor > 0
+                    && char_at(&app.command_input, app.command_cursor - 1)
+                        .is_some_and(|c| !c.is_whitespace())
+                {
+                    app.command_cursor -= 1;
+                    remove_char_at(&mut app.command_input, app.command_cursor);
+                }
+            }
+        }
+
+        Message::CommandSubmit => {
+            if app.mode == Mode::Command {
+                let cmd = app.command_input.trim().to_string();
+                app.mode = Mode::Normal;
+                app.command_input.clear();
+                app.command_cursor = 0;
+                return handle_command(app, &cmd);
+            }
+        }
+
+        // === Page navigation ===
+        Message::PageUp => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                let page_size = 10; // TODO: calculate from terminal height
+                app.messages_scroll = app.messages_scroll.saturating_sub(page_size);
+            }
+        }
+
+        Message::PageDown => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                let page_size = 10; // TODO: calculate from terminal height
+                app.messages_scroll = (app.messages_scroll + page_size)
+                    .min(app.messages.len().saturating_sub(1));
+            }
+        }
+
+        // === Vi-like message actions ===
+        Message::ReplyToMessage => {
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(_msg) = app.current_message()
+            {
+                // TODO: Implement reply functionality
+                app.status = Some("Reply not yet implemented".into());
+            }
+        }
+
+        Message::ForwardMessage => {
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(_msg) = app.current_message()
+            {
+                // TODO: Implement forward functionality
+                app.status = Some("Forward not yet implemented".into());
+            }
+        }
+
+        Message::DeleteMessage => {
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                if msg.is_outgoing {
+                    let msg_id = msg.id;
+                    if let Some(peer_id) = app.current_peer_id {
+                        // TODO: Add AsyncAction::DeleteMessage
+                        app.status = Some(format!("Delete message {} in {}", msg_id, peer_id));
+                    }
+                } else {
+                    app.status = Some("Can only delete your own messages".into());
+                }
+            }
+        }
+
+        Message::EditMessage => {
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                if msg.is_outgoing {
+                    // Pre-fill input with message text and switch to Insert mode
+                    app.input = msg.text.clone();
+                    app.input_cursor = app.input.chars().count();
+                    app.mode = Mode::Insert;
+                    app.focus = Focus::Input;
+                    app.status = Some("Editing message (not yet saved)".into());
+                } else {
+                    app.status = Some("Can only edit your own messages".into());
+                }
+            }
+        }
+
+        Message::YankMessage => {
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                // TODO: Copy to system clipboard
+                app.status = Some(format!("Copied: {}", truncate_str(&msg.text, 50)));
+            }
+        }
+
+        Message::PinMessage => {
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                if let Some(peer_id) = app.current_peer_id {
+                    // TODO: Add AsyncAction::PinMessage
+                    app.status = Some(format!("Pin message {} in {}", msg.id, peer_id));
+                }
+            }
+        }
+
+        // === Search ===
+        Message::StartSearch => {
+            if app.screen == Screen::Main {
+                // TODO: Implement search UI
+                app.status = Some("Search not yet implemented".into());
+            }
+        }
+
+        // === Help popup ===
+        Message::ToggleHelp => {
+            app.show_help = !app.show_help;
+        }
+
+        Message::ClosePopup => {
+            app.show_help = false;
+        }
     }
 
     None
+}
+
+/// Handle command mode commands
+fn handle_command(app: &mut App, cmd: &str) -> Option<Message> {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.is_empty() {
+        return None;
+    }
+
+    match parts[0] {
+        // Quit commands
+        "q" | "quit" => {
+            app.running_state = RunningState::Done;
+        }
+        "qa" | "quitall" => {
+            app.running_state = RunningState::Done;
+        }
+
+        // Navigation
+        "b" | "back" => {
+            app.focus = Focus::ChatList;
+            app.current_peer_id = None;
+        }
+
+        // Search
+        "s" | "search" => {
+            if parts.len() > 1 {
+                let query = parts[1..].join(" ");
+                app.status = Some(format!("Search: {} (not yet implemented)", query));
+            } else {
+                app.status = Some("Usage: :search <query>".into());
+            }
+        }
+
+        // Quick message
+        "m" | "msg" => {
+            if parts.len() > 1 {
+                let text = parts[1..].join(" ");
+                if let Some(peer_id) = app.current_peer_id {
+                    app.send_action(AsyncAction::SendMessage(peer_id, text));
+                } else {
+                    app.status = Some("No chat selected".into());
+                }
+            } else {
+                app.status = Some("Usage: :msg <text>".into());
+            }
+        }
+
+        // Attachments
+        "ap" | "attach" => {
+            if parts.len() > 2 && parts[1] == "photo" {
+                let path = parts[2..].join(" ");
+                if let Some(peer_id) = app.current_peer_id {
+                    app.send_action(AsyncAction::SendPhoto(peer_id, path));
+                } else {
+                    app.status = Some("No chat selected".into());
+                }
+            } else if parts.len() > 2 && parts[1] == "doc" {
+                let path = parts[2..].join(" ");
+                if let Some(peer_id) = app.current_peer_id {
+                    app.send_action(AsyncAction::SendDoc(peer_id, path));
+                } else {
+                    app.status = Some("No chat selected".into());
+                }
+            } else {
+                app.status = Some("Usage: :attach photo <path> | :attach doc <path>".into());
+            }
+        }
+
+        // Help
+        "h" | "help" => {
+            app.show_help = true;
+        }
+
+        // Close popup
+        "close" => {
+            app.show_help = false;
+        }
+
+        _ => {
+            app.status = Some(format!("Unknown command: {}", parts[0]));
+        }
+    }
+
+    None
+}
+
+/// Truncate string for display
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.chars().count() <= max_len {
+        s.to_string()
+    } else {
+        format!(
+            "{}...",
+            s.chars().take(max_len.saturating_sub(3)).collect::<String>()
+        )
+    }
 }
 
 fn chrono_timestamp() -> i64 {

@@ -56,13 +56,35 @@ impl<'a> MessagesApi<'a> {
     /// Method: messages.getConversationsById
     /// https://dev.vk.com/method/messages.getConversationsById
     pub async fn get_conversation_by_id(&self, peer_id: i64) -> Result<Conversation> {
+        let conversations = self.get_conversations_by_ids(&[peer_id]).await?;
+        conversations
+            .into_iter()
+            .next()
+            .context("Conversation not found")
+    }
+
+    /// Get conversations by multiple IDs
+    ///
+    /// # Arguments
+    /// * `peer_ids` - Array of peer IDs (up to 100)
+    ///
+    /// # VK API
+    /// Method: messages.getConversationsById
+    /// https://dev.vk.com/method/messages.getConversationsById
+    pub async fn get_conversations_by_ids(&self, peer_ids: &[i64]) -> Result<Vec<Conversation>> {
         let mut params = HashMap::new();
-        params.insert("peer_ids", peer_id.to_string());
-        params.insert("extended", "1".to_string());
+        // VK API expects comma-separated list of IDs
+        let peer_ids_str = peer_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        params.insert("peer_ids", peer_ids_str);
 
         #[derive(Debug, serde::Deserialize)]
         struct Response {
-            items: Vec<ConversationItem>,
+            count: i32,
+            items: Vec<Conversation>,
         }
 
         let response: Response = self
@@ -70,12 +92,7 @@ impl<'a> MessagesApi<'a> {
             .request("messages.getConversationsById", params)
             .await?;
 
-        response
-            .items
-            .into_iter()
-            .next()
-            .map(|item| item.conversation)
-            .context("Conversation not found")
+        Ok(response.items)
     }
 
     // ========== Messages ==========
@@ -243,16 +260,16 @@ impl<'a> MessagesApi<'a> {
     ///
     /// # Arguments
     /// * `peer_id` - Peer ID
-    /// * `message_id` - Message ID to edit (conversation_message_id)
+    /// * `cmid` - Conversation message ID (local ID in conversation)
     /// * `message` - New message text
     ///
     /// # VK API
     /// Method: messages.edit
     /// https://dev.vk.com/method/messages.edit
-    pub async fn edit(&self, peer_id: i64, message_id: i64, message: &str) -> Result<()> {
+    pub async fn edit(&self, peer_id: i64, cmid: i64, message: &str) -> Result<()> {
         let mut params = HashMap::new();
         params.insert("peer_id", peer_id.to_string());
-        params.insert("conversation_message_id", message_id.to_string());
+        params.insert("cmid", cmid.to_string());
         params.insert("message", message.to_string());
 
         let _: i32 = self.client.request("messages.edit", params).await?;
@@ -348,15 +365,24 @@ impl<'a> MessagesApi<'a> {
         &self,
         query: &str,
         count: u32,
-    ) -> Result<ConversationsResponse> {
+    ) -> Result<Vec<Conversation>> {
         let mut params = HashMap::new();
         params.insert("q", query.to_string());
         params.insert("count", count.to_string());
-        params.insert("extended", "1".to_string());
+        // Note: extended parameter doesn't work for searchConversations
+        // It returns only conversations without profiles/groups
 
-        self.client
+        #[derive(Debug, serde::Deserialize)]
+        struct Response {
+            count: i32,
+            items: Vec<Conversation>,
+        }
+
+        let response: Response = self.client
             .request("messages.searchConversations", params)
-            .await
+            .await?;
+
+        Ok(response.items)
     }
 
     // ========== Pin/Unpin ==========

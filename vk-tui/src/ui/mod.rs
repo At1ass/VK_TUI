@@ -6,13 +6,18 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 
-use crate::app::{App, DeliveryStatus, Focus, Screen};
+use crate::app::{App, DeliveryStatus, Focus, Mode, Screen};
 
 /// Main view function - renders the entire UI
 pub fn view(app: &App, frame: &mut Frame) {
     match app.screen {
         Screen::Auth => render_auth_screen(app, frame),
         Screen::Main => render_main_screen(app, frame),
+    }
+
+    // Render help popup on top if visible
+    if app.show_help {
+        render_help_popup(app, frame);
     }
 }
 
@@ -359,11 +364,28 @@ fn visual_width(s: &str, char_pos: usize) -> usize {
 
 /// Render status bar
 fn render_status(app: &App, frame: &mut Frame, area: Rect) {
-    let default_help = match app.focus {
-        Focus::Input => "Enter send | /sendfile PATH | /sendimg PATH|--clipboard | Esc back",
-        _ => {
-            "j/k nav | h/l panels | i/Enter select | Ctrl+L open link | Ctrl+D save attach | Esc back"
+    // In Command mode, show command prompt
+    if app.mode == Mode::Command {
+        let cmd_text = format!(":{}", app.command_input);
+        let cmd_prompt = Paragraph::new(cmd_text)
+            .style(Style::default().fg(Color::Yellow));
+        frame.render_widget(cmd_prompt, area);
+
+        // Show cursor at command position
+        let cursor_x = visual_width(&app.command_input, app.command_cursor);
+        frame.set_cursor_position((area.x + cursor_x as u16 + 1, area.y)); // +1 for ':'
+        return;
+    }
+
+    // Otherwise show status or help hints
+    let default_help = match (app.mode, app.focus) {
+        (Mode::Insert, _) => "Enter send | /sendfile PATH | /sendimg PATH | Esc back",
+        (Mode::Normal, Focus::ChatList) => "j/k nav | l/Enter select | / search | : cmd | ? help",
+        (Mode::Normal, Focus::Messages) => {
+            "j/k nav | i insert | r reply | e edit | dd delete | p pin | o link | ? help"
         }
+        (Mode::Normal, Focus::Input) => "i insert mode | Esc back",
+        (Mode::Command, _) => "Enter execute | Esc cancel",
     };
     let status_text = app.status.as_deref().unwrap_or(default_help);
 
@@ -414,4 +436,130 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let y = area.y + (area.height.saturating_sub(height)) / 2;
     Rect::new(x, y, width, height)
+}
+
+/// Render help popup
+fn render_help_popup(app: &App, frame: &mut Frame) {
+    let area = frame.area();
+
+    // Create popup area (80% width, 80% height)
+    let width = (area.width as f32 * 0.8).min(100.0) as u16;
+    let height = (area.height as f32 * 0.8).min(40.0) as u16;
+    let popup_area = centered_rect(width, height, area);
+
+    // Clear background
+    frame.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .title(" Help (Esc or q to close) ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    // Help content based on current focus
+    let help_text = match app.focus {
+        Focus::ChatList => vec![
+            Line::from(Span::styled(
+                "Chat List Navigation",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from("j, Down          - Move down"),
+            Line::from("k, Up            - Move up"),
+            Line::from("g                - Go to first chat"),
+            Line::from("G                - Go to last chat"),
+            Line::from("l, Enter         - Open selected chat"),
+            Line::from("/                - Search conversations"),
+            Line::from("h                - Switch to left panel"),
+            Line::from("Tab              - Next panel"),
+            Line::from(""),
+            Line::from(Span::styled("Commands", Style::default().fg(Color::Yellow))),
+            Line::from(""),
+            Line::from(":                - Enter command mode"),
+            Line::from("?                - Toggle this help"),
+            Line::from("Ctrl+Q, Ctrl+C   - Quit application"),
+        ],
+        Focus::Messages => vec![
+            Line::from(Span::styled(
+                "Messages Navigation",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from("j, Down          - Scroll down"),
+            Line::from("k, Up            - Scroll up"),
+            Line::from("g                - Go to first message"),
+            Line::from("G                - Go to last message"),
+            Line::from("Ctrl+U           - Page up"),
+            Line::from("Ctrl+D           - Page down"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Actions",
+                Style::default().fg(Color::Yellow),
+            )),
+            Line::from(""),
+            Line::from("i, l, Enter      - Enter insert mode (write message)"),
+            Line::from("r                - Reply to message (TODO)"),
+            Line::from("f                - Forward message (TODO)"),
+            Line::from("e                - Edit message"),
+            Line::from("dd               - Delete message"),
+            Line::from("yy               - Copy message text"),
+            Line::from("p                - Pin/unpin message (TODO)"),
+            Line::from("o, Ctrl+L        - Open link in message"),
+            Line::from("a                - Download attachments"),
+            Line::from("/                - Search in chat (TODO)"),
+            Line::from("h, Esc           - Back to chat list"),
+        ],
+        Focus::Input => vec![
+            Line::from(Span::styled(
+                "Insert Mode",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from("Type normally to write message"),
+            Line::from("Enter            - Send message"),
+            Line::from("Esc              - Exit to normal mode"),
+            Line::from("Ctrl+W           - Delete word"),
+            Line::from("Ctrl+U           - Clear line"),
+            Line::from("Backspace        - Delete character"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Special Commands",
+                Style::default().fg(Color::Yellow),
+            )),
+            Line::from(""),
+            Line::from("/sendfile <path> - Send file attachment"),
+            Line::from("/sendimg <path>  - Send image"),
+            Line::from("/sendimg --clipboard - Send from clipboard"),
+        ],
+    };
+
+    // Add command mode help if not shown above
+    let mut all_lines = help_text;
+    all_lines.push(Line::from(""));
+    all_lines.push(Line::from(Span::styled(
+        "Command Mode (:)",
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+    )));
+    all_lines.push(Line::from(""));
+    all_lines.push(Line::from(":q, :quit        - Quit application"));
+    all_lines.push(Line::from(":back, :b        - Return to chat list"));
+    all_lines.push(Line::from(":search <q>, :s  - Search conversations"));
+    all_lines.push(Line::from(":msg <text>, :m  - Quick send message"));
+    all_lines.push(Line::from(":attach photo <path>, :ap - Send photo"));
+    all_lines.push(Line::from(":attach doc <path>, :ad   - Send document"));
+    all_lines.push(Line::from(":help, :h        - Show this help"));
+
+    let paragraph = Paragraph::new(all_lines)
+        .wrap(Wrap { trim: false })
+        .scroll((0, 0));
+
+    frame.render_widget(paragraph, inner);
 }

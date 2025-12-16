@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::app::{Chat, ChatMessage};
+use crate::app::{Chat, ChatMessage, Focus, Mode};
 use crate::event::VkEvent;
 use vk_api::User;
 
@@ -22,10 +22,16 @@ pub enum Message {
     NavigateUp,
     /// Navigate down in current list
     NavigateDown,
+    /// Page up
+    PageUp,
+    /// Page down
+    PageDown,
     /// Select current item
     Select,
     /// Go back / cancel
     Back,
+
+    // Insert mode - text input
     /// Input character
     InputChar(char),
     /// Delete character (backspace)
@@ -34,14 +40,60 @@ pub enum Message {
     InputDeleteWord,
     /// Submit input (send message or confirm auth)
     InputSubmit,
+
+    // Command mode - command input
+    /// Command character
+    CommandChar(char),
+    /// Command backspace
+    CommandBackspace,
+    /// Command delete word
+    CommandDeleteWord,
+    /// Execute command
+    CommandSubmit,
+
+    // Mode transitions
+    /// Enter Normal mode
+    EnterNormalMode,
+    /// Enter Insert mode
+    EnterInsertMode,
+    /// Enter Command mode
+    EnterCommandMode,
+
+    // Navigation
     /// Go to top of list
     GoToTop,
     /// Go to bottom of list
     GoToBottom,
+
+    // Message actions (vi-like)
+    /// Reply to selected message
+    ReplyToMessage,
+    /// Forward selected message
+    ForwardMessage,
+    /// Delete selected message
+    DeleteMessage,
+    /// Edit selected message
+    EditMessage,
+    /// Copy message text (yank)
+    YankMessage,
+    /// Pin/unpin message
+    PinMessage,
     /// Open link from selected message
     OpenLink,
     /// Download attachments from selected message
     DownloadAttachment,
+
+    // Search
+    /// Start search mode
+    StartSearch,
+
+    // UI
+    /// Toggle help popup
+    ToggleHelp,
+    /// Close popup
+    ClosePopup,
+
+    // VK events
     /// Send message failed
     SendFailed(String),
     /// VK API event
@@ -57,10 +109,14 @@ pub enum Message {
 }
 
 impl Message {
-    /// Convert key event to message based on current mode
-    /// When in_input is true, most keys go to input; when false, vi-like navigation
-    pub fn from_key_event(key: KeyEvent, in_input: bool) -> Self {
-        // Global shortcuts (work everywhere)
+    /// Convert key event to message based on current mode and focus
+    pub fn from_key_event(key: KeyEvent, mode: Mode, focus: Focus, show_help: bool) -> Self {
+        // Help popup takes precedence
+        if show_help {
+            return Self::help_popup_key(key);
+        }
+
+        // Global shortcuts (work in all modes)
         match key.code {
             KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Message::Quit;
@@ -71,28 +127,122 @@ impl Message {
             KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Message::OpenAuthUrl;
             }
-            KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Message::OpenLink;
-            }
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Message::DownloadAttachment;
-            }
-            KeyCode::Esc => return Message::Back,
             _ => {}
         }
 
-        // Input mode - characters go to input
-        if in_input {
-            return Self::input_mode_key(key);
+        // Route to mode-specific handler
+        match mode {
+            Mode::Normal => Self::normal_mode_key(key, focus),
+            Mode::Insert => Self::insert_mode_key(key),
+            Mode::Command => Self::command_mode_key(key),
         }
-
-        // Normal mode - vi-like navigation
-        Self::normal_mode_key(key)
     }
 
-    /// Handle keys in input mode
-    fn input_mode_key(key: KeyEvent) -> Self {
+    /// Handle keys when help popup is open
+    fn help_popup_key(key: KeyEvent) -> Self {
         match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => Message::ClosePopup,
+            _ => Message::Noop,
+        }
+    }
+
+    /// Handle keys in normal mode - context-aware based on focus
+    fn normal_mode_key(key: KeyEvent, focus: Focus) -> Self {
+        // Global Normal mode keys (work in all focuses)
+        match key.code {
+            KeyCode::Esc => return Message::Back,
+            KeyCode::Tab => return Message::FocusNext,
+            KeyCode::BackTab => return Message::FocusPrev,
+            KeyCode::Char(':') => return Message::EnterCommandMode,
+            KeyCode::Char('?') => return Message::ToggleHelp,
+            _ => {}
+        }
+
+        // Context-specific keys based on focus
+        match focus {
+            Focus::ChatList => Self::chatlist_keys(key),
+            Focus::Messages => Self::messages_keys(key),
+            Focus::Input => {
+                // Input panel in Normal mode - shouldn't happen often
+                // Allow entering Insert mode
+                match key.code {
+                    KeyCode::Char('i') | KeyCode::Enter => Message::EnterInsertMode,
+                    _ => Message::Noop,
+                }
+            }
+        }
+    }
+
+    /// Keys for ChatList panel in Normal mode
+    fn chatlist_keys(key: KeyEvent) -> Self {
+        match key.code {
+            // Navigation
+            KeyCode::Char('j') | KeyCode::Down => Message::NavigateDown,
+            KeyCode::Char('k') | KeyCode::Up => Message::NavigateUp,
+            KeyCode::Char('g') => Message::GoToTop,
+            KeyCode::Char('G') => Message::GoToBottom,
+
+            // Actions
+            KeyCode::Char('l') | KeyCode::Enter => Message::Select,
+            KeyCode::Char('/') => Message::StartSearch,
+
+            _ => Message::Noop,
+        }
+    }
+
+    /// Keys for Messages panel in Normal mode
+    fn messages_keys(key: KeyEvent) -> Self {
+        match key.code {
+            // Navigation with Ctrl modifiers (must come before plain keys)
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Message::PageUp
+            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Message::PageDown
+            }
+            KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Message::OpenLink
+            }
+
+            // Navigation
+            KeyCode::Char('j') | KeyCode::Down => Message::NavigateDown,
+            KeyCode::Char('k') | KeyCode::Up => Message::NavigateUp,
+            KeyCode::Char('g') => Message::GoToTop,
+            KeyCode::Char('G') => Message::GoToBottom,
+
+            // Enter Insert mode
+            KeyCode::Char('i') | KeyCode::Char('l') | KeyCode::Enter => Message::EnterInsertMode,
+
+            // Message actions
+            KeyCode::Char('r') => Message::ReplyToMessage,
+            KeyCode::Char('f') => Message::ForwardMessage,
+            KeyCode::Char('e') => Message::EditMessage,
+            KeyCode::Char('p') => Message::PinMessage,
+
+            // Double-char commands (dd, yy)
+            KeyCode::Char('d') => Message::DeleteMessage, // Will need state for 'dd'
+            KeyCode::Char('y') => Message::YankMessage,   // Will need state for 'yy'
+
+            // Attachments and links
+            KeyCode::Char('o') => Message::OpenLink,
+            KeyCode::Char('a') => Message::DownloadAttachment,
+
+            // Search
+            KeyCode::Char('/') => Message::StartSearch,
+
+            // Back to ChatList
+            KeyCode::Char('h') => Message::FocusPrev,
+
+            _ => Message::Noop,
+        }
+    }
+
+    /// Handle keys in insert mode
+    fn insert_mode_key(key: KeyEvent) -> Self {
+        match key.code {
+            // Exit Insert mode
+            KeyCode::Esc => Message::EnterNormalMode,
+
             // Submit
             KeyCode::Enter => Message::InputSubmit,
 
@@ -112,29 +262,26 @@ impl Message {
         }
     }
 
-    /// Handle keys in normal (navigation) mode - vi-like
-    fn normal_mode_key(key: KeyEvent) -> Self {
+    /// Handle keys in command mode
+    fn command_mode_key(key: KeyEvent) -> Self {
         match key.code {
-            // Vi-like navigation
-            KeyCode::Char('j') | KeyCode::Down => Message::NavigateDown,
-            KeyCode::Char('k') | KeyCode::Up => Message::NavigateUp,
-            KeyCode::Char('h') | KeyCode::Left => Message::FocusPrev,
-            KeyCode::Char('l') | KeyCode::Right => Message::FocusNext,
+            // Exit Command mode
+            KeyCode::Esc => Message::EnterNormalMode,
 
-            // Jump to top/bottom
-            KeyCode::Char('g') => Message::GoToTop,
-            KeyCode::Char('G') => Message::GoToBottom,
+            // Execute command
+            KeyCode::Enter => Message::CommandSubmit,
 
-            // Select / Enter chat / Start input
-            KeyCode::Enter | KeyCode::Char('i') => Message::Select,
+            // Editing
+            KeyCode::Backspace => Message::CommandBackspace,
+            KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Message::CommandDeleteWord
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Message::CommandDeleteWord // Clear command line
+            }
 
-            // Tab also switches panels
-            KeyCode::Tab => Message::FocusNext,
-            KeyCode::BackTab => Message::FocusPrev,
-
-            // In auth screen, allow typing
-            KeyCode::Char(c) => Message::InputChar(c),
-            KeyCode::Backspace => Message::InputBackspace,
+            // Regular character
+            KeyCode::Char(c) => Message::CommandChar(c),
 
             _ => Message::Noop,
         }
