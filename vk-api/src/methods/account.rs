@@ -29,7 +29,10 @@ impl<'a> AccountApi<'a> {
     /// https://dev.vk.com/method/account.getCounters
     pub async fn get_counters(&self) -> Result<Counters> {
         let mut params = HashMap::new();
-        params.insert("filter", "messages,friends,notifications,groups".to_string());
+        params.insert(
+            "filter",
+            "messages,friends,notifications,groups".to_string(),
+        );
 
         self.client.request("account.getCounters", params).await
     }

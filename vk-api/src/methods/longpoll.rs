@@ -4,7 +4,7 @@
 //! References: https://dev.vk.com/api/user-long-poll/getting-started
 
 use anyhow::{Context, Result};
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use crate::client::VkClient;
 use crate::types::*;
@@ -69,6 +69,7 @@ impl<'a> LongPollApi<'a> {
             .client
             .http_client()
             .get(&url)
+            .timeout(Duration::from_secs(35))
             .send()
             .await
             .context("Long poll request failed")?;

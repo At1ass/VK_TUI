@@ -5,8 +5,8 @@ use tokio::sync::mpsc;
 
 use crate::event::VkEvent;
 use crate::message::Message;
-use vk_api::{VkClient, User};
 use vk_api::auth::AuthManager;
+use vk_api::{User, VkClient};
 
 /// Current screen
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -79,6 +79,7 @@ pub struct Chat {
 #[allow(dead_code)]
 pub struct ChatMessage {
     pub id: i64,
+    pub cmid: Option<i64>,
     pub from_id: i64,
     pub from_name: String,
     pub text: String,
@@ -87,6 +88,8 @@ pub struct ChatMessage {
     pub is_read: bool,
     pub delivery: DeliveryStatus,
     pub attachments: Vec<AttachmentInfo>,
+    pub reply: Option<ReplyPreview>,
+    pub fwd_count: usize,
 }
 
 /// Application state (Model in TEA)
@@ -146,6 +149,8 @@ pub struct App {
     pub status: Option<String>,
     /// Is loading data
     pub is_loading: bool,
+    /// Currently editing message index
+    pub editing_message: Option<usize>,
     /// Show help popup
     pub show_help: bool,
 
@@ -164,6 +169,7 @@ pub enum AsyncAction {
     SendPhoto(i64, String), // peer_id, path
     SendDoc(i64, String),   // peer_id, path
     DownloadAttachments(Vec<AttachmentInfo>),
+    EditMessage(i64, i64, String), // peer_id, cmid, text
 }
 
 /// Delivery state for messages
@@ -190,6 +196,12 @@ pub enum AttachmentKind {
     Other(String),
 }
 
+#[derive(Debug, Clone)]
+pub struct ReplyPreview {
+    pub from: String,
+    pub text: String,
+}
+
 impl Default for App {
     fn default() -> Self {
         Self {
@@ -214,6 +226,7 @@ impl Default for App {
             command_cursor: 0,
             status: None,
             is_loading: false,
+            editing_message: None,
             show_help: false,
             action_tx: None,
         }
@@ -537,6 +550,31 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     if !app.input.is_empty()
                         && let Some(peer_id) = app.current_peer_id
                     {
+                        // Editing existing message
+                        if let Some(edit_idx) = app.editing_message {
+                            if let Some(msg) = app.messages.get(edit_idx) {
+                                if let Some(cmid) = msg.cmid {
+                                    let text = std::mem::take(&mut app.input);
+                                    app.input_cursor = 0;
+                                    app.mode = Mode::Normal;
+                                    app.editing_message = None;
+                                    app.status = Some("Editing...".into());
+
+                                    if let Some(m) = app.messages.get_mut(edit_idx) {
+                                        m.text = text.clone();
+                                    }
+
+                                    app.send_action(AsyncAction::EditMessage(peer_id, cmid, text));
+                                    return None;
+                                } else {
+                                    app.status =
+                                        Some("Cannot edit: missing conversation id".into());
+                                    app.editing_message = None;
+                                    return None;
+                                }
+                            }
+                        }
+
                         if let Some(cmd) = parse_send_command(&app.input) {
                             match cmd {
                                 SendCommand::File(path) => {
@@ -548,6 +586,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
 
                                     app.messages.push(ChatMessage {
                                         id: 0, // Will be updated from server
+                                        cmid: None,
                                         from_id: app.auth.user_id().unwrap_or(0),
                                         from_name: "You".into(),
                                         text: format!("[file] {}", title),
@@ -561,6 +600,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                             url: None,
                                             size: None,
                                         }],
+                                        reply: None,
+                                        fwd_count: 0,
                                     });
                                     app.messages_scroll = app.messages.len().saturating_sub(1);
                                     app.input.clear();
@@ -577,6 +618,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
 
                                     app.messages.push(ChatMessage {
                                         id: 0, // Will be updated from server
+                                        cmid: None,
                                         from_id: app.auth.user_id().unwrap_or(0),
                                         from_name: "You".into(),
                                         text: format!("[image] {}", title),
@@ -590,6 +632,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                             url: None,
                                             size: None,
                                         }],
+                                        reply: None,
+                                        fwd_count: 0,
                                     });
                                     app.messages_scroll = app.messages.len().saturating_sub(1);
                                     app.input.clear();
@@ -606,6 +650,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                             .to_string();
                                         app.messages.push(ChatMessage {
                                             id: 0,
+                                            cmid: None,
                                             from_id: app.auth.user_id().unwrap_or(0),
                                             from_name: "You".into(),
                                             text: format!("[image] {}", title),
@@ -619,6 +664,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                                 url: None,
                                                 size: None,
                                             }],
+                                            reply: None,
+                                            fwd_count: 0,
                                         });
                                         app.messages_scroll = app.messages.len().saturating_sub(1);
                                         app.input.clear();
@@ -645,6 +692,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                         // Add message locally (optimistic update)
                         app.messages.push(ChatMessage {
                             id: 0, // Will be updated from server
+                            cmid: None,
                             from_id: app.auth.user_id().unwrap_or(0),
                             from_name: "You".into(),
                             text: text.clone(),
@@ -653,6 +701,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                             is_read: false,
                             delivery: DeliveryStatus::Pending,
                             attachments: Vec::new(),
+                            reply: None,
+                            fwd_count: 0,
                         });
                         app.messages_scroll = app.messages.len().saturating_sub(1);
 
@@ -686,6 +736,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     if app.current_peer_id == Some(peer_id) {
                         app.messages.push(ChatMessage {
                             id: 0,
+                            cmid: None,
                             from_id,
                             from_name: app.get_user_name(from_id),
                             text,
@@ -694,6 +745,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                             is_read: true,
                             delivery: DeliveryStatus::Sent,
                             attachments: Vec::new(),
+                            reply: None,
+                            fwd_count: 0,
                         });
                         app.messages_scroll = app.messages.len().saturating_sub(1);
                         app.send_action(AsyncAction::MarkAsRead(peer_id));
@@ -775,9 +828,30 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
         }
 
+        Message::MessageEdited(cmid) => {
+            app.status = Some("Message edited".into());
+            app.editing_message = None;
+            if let Some(msg) = app.messages.iter_mut().find(|m| m.cmid == Some(cmid)) {
+                msg.delivery = DeliveryStatus::Sent;
+            }
+        }
+
         Message::Error(err) => {
             app.is_loading = false;
-            app.status = Some(format!("Error: {}", err));
+            if is_auth_error(&err) {
+                // Token likely invalid/expired: clear session and return to Auth
+                let _ = app.auth.logout();
+                app.vk_client = None;
+                app.screen = Screen::Auth;
+                app.focus = Focus::ChatList;
+                app.mode = Mode::Insert;
+                app.chats.clear();
+                app.messages.clear();
+                app.current_peer_id = None;
+                app.status = Some("Authorization failed. Please re-authenticate.".into());
+            } else {
+                app.status = Some(format!("Error: {}", err));
+            }
         }
 
         Message::SendFailed(err) => {
@@ -872,8 +946,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         Message::PageDown => {
             if app.screen == Screen::Main && app.focus == Focus::Messages {
                 let page_size = 10; // TODO: calculate from terminal height
-                app.messages_scroll = (app.messages_scroll + page_size)
-                    .min(app.messages.len().saturating_sub(1));
+                app.messages_scroll =
+                    (app.messages_scroll + page_size).min(app.messages.len().saturating_sub(1));
             }
         }
 
@@ -1068,7 +1142,9 @@ fn truncate_str(s: &str, max_len: usize) -> String {
     } else {
         format!(
             "{}...",
-            s.chars().take(max_len.saturating_sub(3)).collect::<String>()
+            s.chars()
+                .take(max_len.saturating_sub(3))
+                .collect::<String>()
         )
     }
 }
@@ -1191,4 +1267,11 @@ enum SendCommand {
     File(String),
     Image(String),
     ImageClipboard,
+}
+
+fn is_auth_error(msg: &str) -> bool {
+    msg.contains("VK API error 5")
+        || msg.contains("VK API error 7")
+        || msg.contains("VK API error 179")
+        || msg.to_lowercase().contains("authorization failed")
 }

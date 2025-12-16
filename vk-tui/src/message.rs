@@ -104,6 +104,8 @@ pub enum Message {
     MessagesLoaded(Vec<ChatMessage>, Vec<User>),
     /// Message sent successfully
     MessageSent(i64),
+    /// Message edited successfully
+    MessageEdited(i64),
     /// Error occurred
     Error(String),
 }
@@ -135,6 +137,28 @@ impl Message {
             Mode::Normal => Self::normal_mode_key(key, focus),
             Mode::Insert => Self::insert_mode_key(key),
             Mode::Command => Self::command_mode_key(key),
+        }
+    }
+
+    /// Handle keys on the Auth screen (always acts like insert mode)
+    pub fn from_auth_key_event(key: KeyEvent) -> Self {
+        match key.code {
+            KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return Message::Quit;
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return Message::Quit;
+            }
+            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return Message::OpenAuthUrl;
+            }
+            KeyCode::Enter => Message::InputSubmit,
+            KeyCode::Backspace => Message::InputBackspace,
+            KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Message::InputDeleteWord
+            }
+            KeyCode::Char(c) => Message::InputChar(c),
+            _ => Message::Noop,
         }
     }
 
@@ -194,9 +218,7 @@ impl Message {
     fn messages_keys(key: KeyEvent) -> Self {
         match key.code {
             // Navigation with Ctrl modifiers (must come before plain keys)
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                Message::PageUp
-            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => Message::PageUp,
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 Message::PageDown
             }

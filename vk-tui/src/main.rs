@@ -18,11 +18,12 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::sync::mpsc;
 
 use app::{
-    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, DeliveryStatus, update,
+    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, DeliveryStatus,
+    ReplyPreview, Screen, update,
 };
 use event::{Event, VkEvent};
 use message::Message;
-use vk_api::{VkClient, User};
+use vk_api::{User, VkClient};
 
 /// Initialize terminal
 fn init_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
@@ -99,6 +100,9 @@ fn spawn_action_handler(
                 AsyncAction::DownloadAttachments(atts) => {
                     tokio::spawn(download_attachments(atts, tx));
                 }
+                AsyncAction::EditMessage(peer_id, cmid, text) => {
+                    tokio::spawn(edit_message(client, peer_id, cmid, text, tx));
+                }
             }
         }
     });
@@ -169,6 +173,20 @@ fn get_user_online(peer_id: &i64, profiles: &[User]) -> bool {
     }
 }
 
+fn get_name(profiles: &[User], user_id: i64) -> String {
+    profiles
+        .iter()
+        .find(|u| u.id == user_id)
+        .map(|u| u.full_name())
+        .unwrap_or_else(|| {
+            if user_id < 0 {
+                format!("Group {}", -user_id)
+            } else {
+                format!("User {}", user_id)
+            }
+        })
+}
+
 /// Map VK attachment to UI attachment info
 fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
     match att.attachment_type.as_str() {
@@ -224,18 +242,7 @@ async fn load_messages(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedS
                 .into_iter()
                 .rev()
                 .map(|msg| {
-                    let from_name = response
-                        .profiles
-                        .iter()
-                        .find(|u| u.id == msg.from_id)
-                        .map(|u| u.full_name())
-                        .unwrap_or_else(|| {
-                            if msg.from_id < 0 {
-                                format!("Group {}", -msg.from_id)
-                            } else {
-                                format!("User {}", msg.from_id)
-                            }
-                        });
+                    let from_name = get_name(&response.profiles, msg.from_id);
 
                     let is_outgoing = msg.is_outgoing();
                     let is_read = msg.is_read();
@@ -245,9 +252,15 @@ async fn load_messages(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedS
                         msg.text
                     };
                     let attachments = msg.attachments.into_iter().map(map_attachment).collect();
+                    let reply = msg.reply_message.as_ref().map(|r| ReplyPreview {
+                        from: get_name(&response.profiles, r.from_id),
+                        text: r.text.clone(),
+                    });
+                    let fwd_count = msg.fwd_messages.len();
 
                     ChatMessage {
                         id: msg.id,
+                        cmid: msg.conversation_message_id,
                         from_id: msg.from_id,
                         from_name,
                         text,
@@ -256,6 +269,8 @@ async fn load_messages(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedS
                         is_read,
                         delivery: DeliveryStatus::Sent,
                         attachments,
+                        reply,
+                        fwd_count,
                     }
                 })
                 .collect();
@@ -295,7 +310,11 @@ async fn send_photo_attachment(
     path: String,
     tx: mpsc::UnboundedSender<Message>,
 ) {
-    match client.messages().send_photo(peer_id, Path::new(&path)).await {
+    match client
+        .messages()
+        .send_photo(peer_id, Path::new(&path))
+        .await
+    {
         Ok(msg_id) => {
             let _ = tx.send(Message::MessageSent(msg_id));
         }
@@ -318,6 +337,27 @@ async fn send_doc_attachment(
         }
         Err(e) => {
             let _ = tx.send(Message::SendFailed(format!("Failed to send file: {}", e)));
+        }
+    }
+}
+
+/// Edit message via VK API
+async fn edit_message(
+    client: Arc<VkClient>,
+    peer_id: i64,
+    cmid: i64,
+    text: String,
+    tx: mpsc::UnboundedSender<Message>,
+) {
+    match client.messages().edit(peer_id, cmid, &text).await {
+        Ok(()) => {
+            let _ = tx.send(Message::MessageEdited(cmid));
+        }
+        Err(e) => {
+            let _ = tx.send(Message::SendFailed(format!(
+                "Failed to edit message: {}",
+                e
+            )));
         }
     }
 }
@@ -405,7 +445,7 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                                 server.ts = ts;
                             }
                         }
-                        2 | 3 => {
+                        2 | 3 | 4 => {
                             // Need to get new server
                             match client.longpoll().get_server().await {
                                 Ok(new_server) => server = new_server,
@@ -582,8 +622,12 @@ async fn main() -> Result<()> {
                         // Periodic updates
                     }
                     Event::Key(key) => {
-                        // Convert key event to message based on current mode and focus
-                        let msg = Message::from_key_event(key, app.mode, app.focus, app.show_help);
+                        // Auth screen uses dedicated input handling; main screen uses modes
+                        let msg = if app.screen == Screen::Auth {
+                            Message::from_auth_key_event(key)
+                        } else {
+                            Message::from_key_event(key, app.mode, app.focus, app.show_help)
+                        };
                         let mut current_msg = Some(msg);
 
                         // Process message chain

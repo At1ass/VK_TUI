@@ -19,5 +19,5 @@ pub use message::{
     MessagesHistoryResponse,
 };
 pub use misc::{CanWrite, City, Counters, Country, ProfileInfo};
-pub use upload::{SavedDoc, SavedPhoto, UploadServer};
+pub use upload::{DocInfo, SavedDoc, SavedPhoto, UploadDocResponse, UploadServer};
 pub use user::{LastSeen, User};

@@ -26,6 +26,12 @@ pub struct Message {
 
     #[serde(default)]
     pub conversation_message_id: Option<i64>,
+
+    #[serde(default)]
+    pub fwd_messages: Vec<Message>,
+
+    #[serde(default)]
+    pub reply_message: Option<Box<Message>>,
 }
 
 impl Message {

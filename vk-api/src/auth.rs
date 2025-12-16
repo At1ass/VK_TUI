@@ -67,8 +67,20 @@ impl AuthManager {
 
     /// Save token from redirect URL
     pub fn save_token_from_url(&mut self, url: &str) -> Result<()> {
+        // Normalize URL: users sometimes paste //oauth.vk.com/blank.html#...
+        let normalized = if url.starts_with("//") {
+            format!("https:{}", url)
+        } else if !url.contains("://") && url.starts_with("oauth.vk.com/") {
+            format!("https://{}", url)
+        } else {
+            url.to_string()
+        };
+
         // URL format: https://oauth.vk.com/blank.html#access_token=...&expires_in=...&user_id=...
-        let fragment = url.split('#').nth(1).context("No fragment in URL")?;
+        let fragment = normalized
+            .split('#')
+            .nth(1)
+            .context("No fragment in URL (expected #access_token=...)")?;
 
         let mut access_token = None;
         let mut user_id = None;
@@ -105,6 +117,11 @@ impl AuthManager {
         };
 
         let data = serde_json::to_string_pretty(&token)?;
+
+        if let Some(parent) = self.config_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
         std::fs::write(&self.config_path, data)?;
 
         self.token = Some(token);

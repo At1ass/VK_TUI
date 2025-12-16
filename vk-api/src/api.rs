@@ -175,7 +175,10 @@ impl VkClient {
             }
         }
 
-        tracing::debug!("Calling photos.saveMessagesPhoto with params: {:?}", save_params);
+        tracing::debug!(
+            "Calling photos.saveMessagesPhoto with params: {:?}",
+            save_params
+        );
 
         let saved: Vec<SavedPhoto> = self
             .request("photos.saveMessagesPhoto", save_params)
@@ -214,8 +217,8 @@ impl VkClient {
         tracing::debug!("Doc upload response: {}", response_text);
 
         // Parse response as generic JSON to capture all fields
-        let upload_json: serde_json::Value = serde_json::from_str(&response_text)
-            .context("Failed to parse doc upload response")?;
+        let upload_json: serde_json::Value =
+            serde_json::from_str(&response_text).context("Failed to parse doc upload response")?;
 
         // Convert all fields from upload response to params for docs.save
         let mut save_params: HashMap<&str, String> = HashMap::new();
@@ -233,10 +236,11 @@ impl VkClient {
         tracing::debug!("Calling docs.save with params: {:?}", save_params);
 
         let saved: Vec<SavedDoc> = self.request("docs.save", save_params).await?;
-        let attachment = saved
-            .first()
-            .map(|d| format!("doc{}_{}", d.owner_id, d.id))
-            .context("No saved doc returned")?;
+        let doc = saved
+            .iter()
+            .find_map(|d| d.doc.as_ref())
+            .context("No doc object in docs.save response")?;
+        let attachment = format!("doc{}_{}", doc.owner_id, doc.id);
 
         self.send_with_attachments(peer_id, "", Some(attachment))
             .await
@@ -265,12 +269,28 @@ impl VkClient {
 
 /// Generate random message ID
 fn rand_id() -> i64 {
-    rand::thread_rng().r#gen()
+    let mut rng = rand::thread_rng();
+    let mut id: i64 = rng.r#gen::<u32>() as i64;
+    if id == 0 {
+        id = 1;
+    }
+    id
 }
 
 /// Build a simple multipart/form-data body with a single file part
 fn build_multipart_body(path: &Path, field_name: &str) -> Result<(String, Vec<u8>)> {
     use std::io::Write;
+
+    const MAX_UPLOAD_BYTES: u64 = 50 * 1024 * 1024; // 50 MB soft limit for TUI
+
+    let metadata = std::fs::metadata(path)?;
+    if metadata.len() > MAX_UPLOAD_BYTES {
+        anyhow::bail!(
+            "File is too large ({} bytes, limit {} bytes)",
+            metadata.len(),
+            MAX_UPLOAD_BYTES
+        );
+    }
 
     let boundary = format!("vk_tui_boundary_{}", rand_id());
     let mut body = Vec::new();
@@ -279,6 +299,10 @@ fn build_multipart_body(path: &Path, field_name: &str) -> Result<(String, Vec<u8
         .and_then(|n| n.to_str())
         .unwrap_or("file.bin");
     let data = std::fs::read(path)?;
+    let content_type = mime_guess::from_path(path)
+        .first_or_octet_stream()
+        .essence_str()
+        .to_string();
 
     write!(body, "--{}\r\n", boundary)?;
     write!(
@@ -286,7 +310,7 @@ fn build_multipart_body(path: &Path, field_name: &str) -> Result<(String, Vec<u8
         "Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"\r\n",
         field_name, filename
     )?;
-    write!(body, "Content-Type: application/octet-stream\r\n\r\n")?;
+    write!(body, "Content-Type: {}\r\n\r\n", content_type)?;
     body.extend_from_slice(&data);
     write!(body, "\r\n--{}--\r\n", boundary)?;
 

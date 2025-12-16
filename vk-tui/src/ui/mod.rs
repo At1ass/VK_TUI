@@ -230,7 +230,8 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
     let messages: Vec<ListItem> = app
         .messages
         .iter()
-        .map(|msg| {
+        .enumerate()
+        .map(|(idx, msg)| {
             let name_style = if msg.is_outgoing {
                 Style::default().fg(Color::Green)
             } else {
@@ -267,6 +268,25 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
                     )
                 },
             ])];
+
+            if let Some(reply) = &msg.reply {
+                lines.push(Line::from(vec![
+                    Span::styled("↩ ", Style::default().fg(Color::Gray)),
+                    Span::styled(&reply.from, Style::default().fg(Color::Gray)),
+                    Span::raw(": "),
+                    Span::styled(
+                        truncate_str(&reply.text, 60),
+                        Style::default().fg(Color::Gray),
+                    ),
+                ]));
+            }
+
+            if msg.fwd_count > 0 {
+                lines.push(Line::from(vec![Span::styled(
+                    format!("↪ forwarded {}", msg.fwd_count),
+                    Style::default().fg(Color::Gray),
+                )]));
+            }
 
             for att in &msg.attachments {
                 let label = match &att.kind {
@@ -367,8 +387,7 @@ fn render_status(app: &App, frame: &mut Frame, area: Rect) {
     // In Command mode, show command prompt
     if app.mode == Mode::Command {
         let cmd_text = format!(":{}", app.command_input);
-        let cmd_prompt = Paragraph::new(cmd_text)
-            .style(Style::default().fg(Color::Yellow));
+        let cmd_prompt = Paragraph::new(cmd_text).style(Style::default().fg(Color::Yellow));
         frame.render_widget(cmd_prompt, area);
 
         // Show cursor at command position
@@ -498,10 +517,7 @@ fn render_help_popup(app: &App, frame: &mut Frame) {
             Line::from("Ctrl+U           - Page up"),
             Line::from("Ctrl+D           - Page down"),
             Line::from(""),
-            Line::from(Span::styled(
-                "Actions",
-                Style::default().fg(Color::Yellow),
-            )),
+            Line::from(Span::styled("Actions", Style::default().fg(Color::Yellow))),
             Line::from(""),
             Line::from("i, l, Enter      - Enter insert mode (write message)"),
             Line::from("r                - Reply to message (TODO)"),
@@ -546,7 +562,9 @@ fn render_help_popup(app: &App, frame: &mut Frame) {
     all_lines.push(Line::from(""));
     all_lines.push(Line::from(Span::styled(
         "Command Mode (:)",
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
     )));
     all_lines.push(Line::from(""));
     all_lines.push(Line::from(":q, :quit        - Quit application"));

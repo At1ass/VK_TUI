@@ -11,6 +11,10 @@ pub struct Attachment {
 
     #[serde(default)]
     pub doc: Option<Doc>,
+
+    // Other attachment types are ignored for now but preserved
+    #[serde(flatten, default)]
+    pub other: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Photo attachment

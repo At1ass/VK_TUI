@@ -15,8 +15,7 @@ fn get_test_token() -> String {
     let content = std::fs::read_to_string(&config_path)
         .expect(&format!("Cannot read token from {:?}", config_path));
 
-    let json: serde_json::Value = serde_json::from_str(&content)
-        .expect("Cannot parse token.json");
+    let json: serde_json::Value = serde_json::from_str(&content).expect("Cannot parse token.json");
 
     json["access_token"]
         .as_str()
@@ -32,12 +31,9 @@ fn get_test_user_id() -> i64 {
     let content = std::fs::read_to_string(&config_path)
         .expect(&format!("Cannot read token from {:?}", config_path));
 
-    let json: serde_json::Value = serde_json::from_str(&content)
-        .expect("Cannot parse token.json");
+    let json: serde_json::Value = serde_json::from_str(&content).expect("Cannot parse token.json");
 
-    json["user_id"]
-        .as_i64()
-        .expect("No user_id in token.json")
+    json["user_id"].as_i64().expect("No user_id in token.json")
 }
 
 /// Get current user ID
@@ -74,10 +70,18 @@ async fn test_get_conversations() {
                 } else {
                     "DM"
                 };
-                println!("  {}. {} (peer_id: {})", i + 1, title, item.conversation.peer.id);
+                println!(
+                    "  {}. {} (peer_id: {})",
+                    i + 1,
+                    title,
+                    item.conversation.peer.id
+                );
             }
 
-            assert!(response.items.len() > 0, "Should have at least one conversation");
+            assert!(
+                response.items.len() > 0,
+                "Should have at least one conversation"
+            );
         }
         Err(e) => {
             panic!("Failed to get conversations: {}", e);
@@ -98,7 +102,10 @@ async fn test_get_current_user() {
         Ok(users) => {
             assert!(users.len() > 0, "Should return user");
             let user = &users[0];
-            println!("✓ Current user: {} {} (ID: {})", user.first_name, user.last_name, user.id);
+            println!(
+                "✓ Current user: {} {} (ID: {})",
+                user.first_name, user.last_name, user.id
+            );
             assert_eq!(user.id, user_id, "User ID should match");
         }
         Err(e) => {
@@ -121,8 +128,10 @@ async fn test_send_and_get_saved_messages() {
     println!("Sending test message to Saved Messages...");
 
     // Send test message
-    let test_message = format!("Test message from vk-api integration test at {}",
-        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"));
+    let test_message = format!(
+        "Test message from vk-api integration test at {}",
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
+    );
 
     let send_result = client.messages().send(peer_id, &test_message).await;
 
@@ -136,7 +145,10 @@ async fn test_send_and_get_saved_messages() {
 
             // Get message history to verify
             println!("Fetching message history...");
-            let history = client.messages().get_history(peer_id, 0, 10).await
+            let history = client
+                .messages()
+                .get_history(peer_id, 0, 10)
+                .await
                 .expect("Failed to get history");
 
             println!("✓ Got {} messages from history", history.items.len());
@@ -303,7 +315,10 @@ async fn test_edit_message() {
 
     // Send a message first
     let original_text = format!("Original text - {}", chrono::Utc::now().format("%H:%M:%S"));
-    let msg_id = client.messages().send(user_id, &original_text).await
+    let msg_id = client
+        .messages()
+        .send(user_id, &original_text)
+        .await
         .expect("Failed to send message");
 
     println!("✓ Sent message {} with text: {}", msg_id, original_text);
@@ -322,7 +337,10 @@ async fn test_edit_message() {
             // Verify by getting history
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-            let history = client.messages().get_history(user_id, 0, 10).await
+            let history = client
+                .messages()
+                .get_history(user_id, 0, 10)
+                .await
                 .expect("Failed to get history");
 
             if let Some(msg) = history.items.iter().find(|m| m.id == msg_id) {
@@ -332,7 +350,10 @@ async fn test_edit_message() {
         }
         Err(e) => {
             // Editing messages in Saved Messages might not be allowed
-            println!("⚠ Edit failed (might be expected for Saved Messages): {}", e);
+            println!(
+                "⚠ Edit failed (might be expected for Saved Messages): {}",
+                e
+            );
         }
     }
 }
@@ -345,8 +366,14 @@ async fn test_delete_message() {
     let user_id = get_current_user_id(&client).await;
 
     // Send a message to delete
-    let text = format!("Message to delete - {}", chrono::Utc::now().format("%H:%M:%S"));
-    let msg_id = client.messages().send(user_id, &text).await
+    let text = format!(
+        "Message to delete - {}",
+        chrono::Utc::now().format("%H:%M:%S")
+    );
+    let msg_id = client
+        .messages()
+        .send(user_id, &text)
+        .await
         .expect("Failed to send message");
 
     println!("✓ Sent message {} to delete", msg_id);
@@ -386,7 +413,10 @@ async fn test_get_conversation_by_id() {
             assert_eq!(conversation.peer.id, user_id, "Peer ID should match");
         }
         Err(e) => {
-            println!("⚠ get_conversation_by_id failed (might be API issue): {}", e);
+            println!(
+                "⚠ get_conversation_by_id failed (might be API issue): {}",
+                e
+            );
             // Don't panic - this method might have issues with parsing
         }
     }

@@ -9,7 +9,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::client::VkClient;
+use crate::types::upload::UploadDocResponse;
 use crate::types::*;
+use serde_json::Value;
 
 /// Messages API namespace
 pub struct MessagesApi<'a> {
@@ -179,12 +181,7 @@ impl<'a> MessagesApi<'a> {
     ///
     /// # VK API
     /// Method: messages.send (with reply_to parameter)
-    pub async fn send_with_reply(
-        &self,
-        peer_id: i64,
-        message: &str,
-        reply_to: i64,
-    ) -> Result<i64> {
+    pub async fn send_with_reply(&self, peer_id: i64, message: &str, reply_to: i64) -> Result<i64> {
         self.send_with_params(peer_id, message, Some(reply_to), None, None)
             .await
     }
@@ -361,11 +358,7 @@ impl<'a> MessagesApi<'a> {
     /// # VK API
     /// Method: messages.searchConversations
     /// https://dev.vk.com/method/messages.searchConversations
-    pub async fn search_conversations(
-        &self,
-        query: &str,
-        count: u32,
-    ) -> Result<Vec<Conversation>> {
+    pub async fn search_conversations(&self, query: &str, count: u32) -> Result<Vec<Conversation>> {
         let mut params = HashMap::new();
         params.insert("q", query.to_string());
         params.insert("count", count.to_string());
@@ -378,7 +371,8 @@ impl<'a> MessagesApi<'a> {
             items: Vec<Conversation>,
         }
 
-        let response: Response = self.client
+        let response: Response = self
+            .client
             .request("messages.searchConversations", params)
             .await?;
 
@@ -457,10 +451,7 @@ impl<'a> MessagesApi<'a> {
         params.insert("cmid", cmid.to_string());
         params.insert("reaction_id", reaction_id.to_string());
 
-        let _: i32 = self
-            .client
-            .request("messages.sendReaction", params)
-            .await?;
+        let _: i32 = self.client.request("messages.sendReaction", params).await?;
         Ok(())
     }
 
@@ -520,8 +511,8 @@ impl<'a> MessagesApi<'a> {
         let response_text = response.text().await?;
 
         // Parse upload response
-        let upload_json: serde_json::Value =
-            serde_json::from_str(&response_text).context("Failed to parse photo upload response")?;
+        let upload_json: serde_json::Value = serde_json::from_str(&response_text)
+            .context("Failed to parse photo upload response")?;
 
         // Save photo
         let mut save_params: HashMap<&str, String> = HashMap::new();
@@ -583,30 +574,45 @@ impl<'a> MessagesApi<'a> {
             .context("Doc upload failed")?;
 
         let response_text = response.text().await?;
+        let upload_json: UploadDocResponse = serde_json::from_str(&response_text).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse doc upload response: {}; body: {}",
+                e,
+                response_text
+            )
+        })?;
 
-        // Parse upload response
-        let upload_json: serde_json::Value =
-            serde_json::from_str(&response_text).context("Failed to parse doc upload response")?;
+        if let Some(err) = upload_json.error {
+            let descr = upload_json.error_descr.unwrap_or_default();
+            anyhow::bail!(
+                "Upload error from VK: {}{}",
+                err,
+                if descr.is_empty() {
+                    "".to_string()
+                } else {
+                    format!(" ({})", descr)
+                }
+            );
+        }
 
         // Save doc
         let mut save_params: HashMap<&str, String> = HashMap::new();
-        if let Some(obj) = upload_json.as_object() {
-            for (key, value) in obj {
-                let value_str = match value {
-                    serde_json::Value::String(s) => s.clone(),
-                    serde_json::Value::Number(n) => n.to_string(),
-                    _ => value.to_string(),
-                };
-                save_params.insert(key, value_str);
-            }
+        let file_id = upload_json
+            .file
+            .context("Upload response missing file id")?;
+        save_params.insert("file", file_id);
+
+        // Pass filename to docs.save so it is not "untitled"
+        if let Some(title) = doc_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string())
+        {
+            save_params.insert("title", title);
         }
 
-        let saved: Vec<SavedDoc> = self.client.request("docs.save", save_params).await?;
-
-        let attachment = saved
-            .first()
-            .map(|d| format!("doc{}_{}", d.owner_id, d.id))
-            .context("No saved doc returned")?;
+        let saved: Value = self.client.request("docs.save", save_params).await?;
+        let attachment = extract_doc_attachment(&saved)?;
 
         // Send message with attachment
         self.send_with_attachment(peer_id, "", &attachment).await
@@ -631,12 +637,28 @@ impl ActivityType {
 
 /// Generate random message ID for VK API
 fn generate_random_id() -> i64 {
-    rand::thread_rng().r#gen()
+    let mut rng = rand::thread_rng();
+    let mut id: i64 = rng.r#gen::<u32>() as i64;
+    if id == 0 {
+        id = 1;
+    }
+    id
 }
 
 /// Build a simple multipart/form-data body with a single file part
 fn build_multipart_body(path: &Path, field_name: &str) -> Result<(String, Vec<u8>)> {
     use std::io::Write;
+
+    const MAX_UPLOAD_BYTES: u64 = 50 * 1024 * 1024; // 50 MB soft limit for TUI
+
+    let metadata = std::fs::metadata(path)?;
+    if metadata.len() > MAX_UPLOAD_BYTES {
+        anyhow::bail!(
+            "File is too large ({} bytes, limit {} bytes)",
+            metadata.len(),
+            MAX_UPLOAD_BYTES
+        );
+    }
 
     let boundary = format!("vk_api_boundary_{}", generate_random_id());
     let mut body = Vec::new();
@@ -645,6 +667,10 @@ fn build_multipart_body(path: &Path, field_name: &str) -> Result<(String, Vec<u8
         .and_then(|n| n.to_str())
         .unwrap_or("file.bin");
     let data = std::fs::read(path)?;
+    let content_type = mime_guess::from_path(path)
+        .first_or_octet_stream()
+        .essence_str()
+        .to_string();
 
     write!(body, "--{}\r\n", boundary)?;
     write!(
@@ -652,11 +678,51 @@ fn build_multipart_body(path: &Path, field_name: &str) -> Result<(String, Vec<u8
         "Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"\r\n",
         field_name, filename
     )?;
-    write!(body, "Content-Type: application/octet-stream\r\n\r\n")?;
+    write!(body, "Content-Type: {}\r\n\r\n", content_type)?;
     body.extend_from_slice(&data);
     write!(body, "\r\n--{}--\r\n", boundary)?;
 
     Ok((boundary, body))
+}
+
+fn extract_doc_attachment(value: &Value) -> Result<String> {
+    // docs.save may return an array or an object {response:{type, doc}}
+    if let Some(obj) = value.get("response") {
+        return extract_doc_attachment(obj);
+    }
+
+    if let Some(arr) = value.as_array() {
+        if let Some(first) = arr.first() {
+            if let Some(doc_obj) = first
+                .get("doc")
+                .or_else(|| first.as_object().map(|_| first))
+            {
+                if let (Some(owner_id), Some(id)) = (
+                    doc_obj.get("owner_id").and_then(|v| v.as_i64()),
+                    doc_obj.get("id").and_then(|v| v.as_i64()),
+                ) {
+                    return Ok(format!("doc{}_{}", owner_id, id));
+                }
+            }
+        }
+    }
+
+    if let Some(doc_obj) = value
+        .get("doc")
+        .or_else(|| value.as_object().map(|_| value))
+    {
+        if let (Some(owner_id), Some(id)) = (
+            doc_obj.get("owner_id").and_then(|v| v.as_i64()),
+            doc_obj.get("id").and_then(|v| v.as_i64()),
+        ) {
+            return Ok(format!("doc{}_{}", owner_id, id));
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Could not find doc id in docs.save response: {}",
+        value
+    ))
 }
 
 /// Reaction type
