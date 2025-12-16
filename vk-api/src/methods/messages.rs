@@ -1,0 +1,641 @@
+//! Messages API implementation
+//!
+//! Provides methods for working with VK messages, conversations, and related functionality.
+//! References: https://dev.vk.com/method/messages
+
+use anyhow::{Context, Result};
+use rand::Rng;
+use std::collections::HashMap;
+use std::path::Path;
+
+use crate::client::VkClient;
+use crate::types::*;
+
+/// Messages API namespace
+pub struct MessagesApi<'a> {
+    client: &'a VkClient,
+}
+
+impl<'a> MessagesApi<'a> {
+    pub(crate) fn new(client: &'a VkClient) -> Self {
+        Self { client }
+    }
+
+    // ========== Conversations ==========
+
+    /// Get list of conversations
+    ///
+    /// # Arguments
+    /// * `offset` - Offset for pagination (default: 0)
+    /// * `count` - Number of conversations to return (max: 200, default: 20)
+    ///
+    /// # Returns
+    /// ConversationsResponse with items and profiles
+    ///
+    /// # VK API
+    /// Method: messages.getConversations
+    /// https://dev.vk.com/method/messages.getConversations
+    pub async fn get_conversations(
+        &self,
+        offset: u32,
+        count: u32,
+    ) -> Result<ConversationsResponse> {
+        let mut params = HashMap::new();
+        params.insert("offset", offset.to_string());
+        params.insert("count", count.to_string());
+        params.insert("extended", "1".to_string());
+
+        self.client
+            .request("messages.getConversations", params)
+            .await
+    }
+
+    /// Get conversation by peer_id
+    ///
+    /// # VK API
+    /// Method: messages.getConversationsById
+    /// https://dev.vk.com/method/messages.getConversationsById
+    pub async fn get_conversation_by_id(&self, peer_id: i64) -> Result<Conversation> {
+        let mut params = HashMap::new();
+        params.insert("peer_ids", peer_id.to_string());
+        params.insert("extended", "1".to_string());
+
+        #[derive(Debug, serde::Deserialize)]
+        struct Response {
+            items: Vec<ConversationItem>,
+        }
+
+        let response: Response = self
+            .client
+            .request("messages.getConversationsById", params)
+            .await?;
+
+        response
+            .items
+            .into_iter()
+            .next()
+            .map(|item| item.conversation)
+            .context("Conversation not found")
+    }
+
+    // ========== Messages ==========
+
+    /// Get message history for a conversation
+    ///
+    /// # Arguments
+    /// * `peer_id` - Peer ID (user_id for DM, 2000000000+chat_id for group chats)
+    /// * `offset` - Offset for pagination
+    /// * `count` - Number of messages (max: 200)
+    ///
+    /// # Returns
+    /// MessagesHistoryResponse with messages and profiles
+    ///
+    /// # VK API
+    /// Method: messages.getHistory
+    /// https://dev.vk.com/method/messages.getHistory
+    pub async fn get_history(
+        &self,
+        peer_id: i64,
+        offset: u32,
+        count: u32,
+    ) -> Result<MessagesHistoryResponse> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        params.insert("offset", offset.to_string());
+        params.insert("count", count.to_string());
+        params.insert("extended", "1".to_string());
+
+        self.client.request("messages.getHistory", params).await
+    }
+
+    /// Get message by conversation_message_id
+    ///
+    /// # VK API
+    /// Method: messages.getByConversationMessageId
+    /// https://dev.vk.com/method/messages.getByConversationMessageId
+    pub async fn get_by_conversation_message_id(
+        &self,
+        peer_id: i64,
+        conversation_message_ids: &[i64],
+    ) -> Result<Vec<Message>> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        let ids: Vec<String> = conversation_message_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect();
+        params.insert("conversation_message_ids", ids.join(","));
+
+        #[derive(Debug, serde::Deserialize)]
+        struct Response {
+            items: Vec<Message>,
+        }
+
+        let response: Response = self
+            .client
+            .request("messages.getByConversationMessageId", params)
+            .await?;
+
+        Ok(response.items)
+    }
+
+    // ========== Send Messages ==========
+
+    /// Send text message
+    ///
+    /// # Arguments
+    /// * `peer_id` - Recipient peer ID
+    /// * `message` - Message text (max: 4096 chars)
+    ///
+    /// # Returns
+    /// Message ID
+    ///
+    /// # VK API
+    /// Method: messages.send
+    /// https://dev.vk.com/method/messages.send
+    pub async fn send(&self, peer_id: i64, message: &str) -> Result<i64> {
+        self.send_with_params(peer_id, message, None, None, None)
+            .await
+    }
+
+    /// Send message with reply
+    ///
+    /// # VK API
+    /// Method: messages.send (with reply_to parameter)
+    pub async fn send_with_reply(
+        &self,
+        peer_id: i64,
+        message: &str,
+        reply_to: i64,
+    ) -> Result<i64> {
+        self.send_with_params(peer_id, message, Some(reply_to), None, None)
+            .await
+    }
+
+    /// Send message with forward
+    ///
+    /// # VK API
+    /// Method: messages.send (with forward_messages parameter)
+    pub async fn send_with_forward(
+        &self,
+        peer_id: i64,
+        message: &str,
+        forward_messages: &[i64],
+    ) -> Result<i64> {
+        self.send_with_params(peer_id, message, None, Some(forward_messages), None)
+            .await
+    }
+
+    /// Send message with attachment
+    ///
+    /// # Arguments
+    /// * `attachment` - Attachment string (e.g., "photo123_456" or "doc123_456")
+    ///
+    /// # VK API
+    /// Method: messages.send (with attachment parameter)
+    pub async fn send_with_attachment(
+        &self,
+        peer_id: i64,
+        message: &str,
+        attachment: &str,
+    ) -> Result<i64> {
+        self.send_with_params(peer_id, message, None, None, Some(attachment))
+            .await
+    }
+
+    /// Internal method to send message with various parameters
+    async fn send_with_params(
+        &self,
+        peer_id: i64,
+        message: &str,
+        reply_to: Option<i64>,
+        forward_messages: Option<&[i64]>,
+        attachment: Option<&str>,
+    ) -> Result<i64> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+
+        if !message.is_empty() {
+            params.insert("message", message.to_string());
+        }
+
+        if let Some(reply) = reply_to {
+            params.insert("reply_to", reply.to_string());
+        }
+
+        if let Some(fwd) = forward_messages {
+            let fwd_ids: Vec<String> = fwd.iter().map(|id| id.to_string()).collect();
+            params.insert("forward_messages", fwd_ids.join(","));
+        }
+
+        if let Some(att) = attachment {
+            params.insert("attachment", att.to_string());
+        }
+
+        params.insert("random_id", generate_random_id().to_string());
+
+        self.client.request("messages.send", params).await
+    }
+
+    // ========== Edit/Delete ==========
+
+    /// Edit message
+    ///
+    /// # Arguments
+    /// * `peer_id` - Peer ID
+    /// * `message_id` - Message ID to edit (conversation_message_id)
+    /// * `message` - New message text
+    ///
+    /// # VK API
+    /// Method: messages.edit
+    /// https://dev.vk.com/method/messages.edit
+    pub async fn edit(&self, peer_id: i64, message_id: i64, message: &str) -> Result<()> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        params.insert("conversation_message_id", message_id.to_string());
+        params.insert("message", message.to_string());
+
+        let _: i32 = self.client.request("messages.edit", params).await?;
+        Ok(())
+    }
+
+    /// Delete messages
+    ///
+    /// # Arguments
+    /// * `message_ids` - IDs of messages to delete
+    /// * `delete_for_all` - Delete for all participants (only for own messages)
+    ///
+    /// # VK API
+    /// Method: messages.delete
+    /// https://dev.vk.com/method/messages.delete
+    pub async fn delete(&self, message_ids: &[i64], delete_for_all: bool) -> Result<()> {
+        let mut params = HashMap::new();
+        let ids: Vec<String> = message_ids.iter().map(|id| id.to_string()).collect();
+        params.insert("message_ids", ids.join(","));
+
+        if delete_for_all {
+            params.insert("delete_for_all", "1".to_string());
+        }
+
+        let _: serde_json::Value = self.client.request("messages.delete", params).await?;
+        Ok(())
+    }
+
+    // ========== Search ==========
+
+    /// Search messages
+    ///
+    /// # Arguments
+    /// * `query` - Search query
+    /// * `peer_id` - Search in specific conversation (None for global search)
+    /// * `count` - Number of results (max: 100)
+    ///
+    /// # VK API
+    /// Method: messages.search
+    /// https://dev.vk.com/method/messages.search
+    pub async fn search(
+        &self,
+        query: &str,
+        peer_id: Option<i64>,
+        count: u32,
+    ) -> Result<Vec<Message>> {
+        let mut params = HashMap::new();
+        params.insert("q", query.to_string());
+        params.insert("count", count.to_string());
+
+        if let Some(pid) = peer_id {
+            params.insert("peer_id", pid.to_string());
+        }
+
+        #[derive(Debug, serde::Deserialize)]
+        struct Response {
+            items: Vec<Message>,
+        }
+
+        let response: Response = self.client.request("messages.search", params).await?;
+        Ok(response.items)
+    }
+
+    /// Search conversations
+    ///
+    /// Returns a list of conversations that match search criteria.
+    /// Useful for finding specific chats by name or title.
+    ///
+    /// # Arguments
+    /// * `query` - Search query (name, chat title, etc.)
+    /// * `count` - Number of results (max: 255, default: 20)
+    ///
+    /// # Returns
+    /// ConversationsResponse with matching conversations and profiles
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use vk_api::VkClient;
+    /// # async fn example(client: VkClient) -> anyhow::Result<()> {
+    /// // Find all chats with "Ivan" in the name
+    /// let result = client.messages().search_conversations("Ivan", 20).await?;
+    /// for item in result.items {
+    ///     println!("Found chat: {:?}", item.conversation.peer.id);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # VK API
+    /// Method: messages.searchConversations
+    /// https://dev.vk.com/method/messages.searchConversations
+    pub async fn search_conversations(
+        &self,
+        query: &str,
+        count: u32,
+    ) -> Result<ConversationsResponse> {
+        let mut params = HashMap::new();
+        params.insert("q", query.to_string());
+        params.insert("count", count.to_string());
+        params.insert("extended", "1".to_string());
+
+        self.client
+            .request("messages.searchConversations", params)
+            .await
+    }
+
+    // ========== Pin/Unpin ==========
+
+    /// Pin message in conversation
+    ///
+    /// # VK API
+    /// Method: messages.pin
+    /// https://dev.vk.com/method/messages.pin
+    pub async fn pin(&self, peer_id: i64, message_id: i64) -> Result<()> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        params.insert("conversation_message_id", message_id.to_string());
+
+        let _: serde_json::Value = self.client.request("messages.pin", params).await?;
+        Ok(())
+    }
+
+    /// Unpin message in conversation
+    ///
+    /// # VK API
+    /// Method: messages.unpin
+    /// https://dev.vk.com/method/messages.unpin
+    pub async fn unpin(&self, peer_id: i64) -> Result<()> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+
+        let _: serde_json::Value = self.client.request("messages.unpin", params).await?;
+        Ok(())
+    }
+
+    // ========== Read Status ==========
+
+    /// Mark messages as read
+    ///
+    /// # VK API
+    /// Method: messages.markAsRead
+    /// https://dev.vk.com/method/messages.markAsRead
+    pub async fn mark_as_read(&self, peer_id: i64) -> Result<i32> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+
+        self.client.request("messages.markAsRead", params).await
+    }
+
+    // ========== Activity ==========
+
+    /// Set typing/recording activity
+    ///
+    /// # VK API
+    /// Method: messages.setActivity
+    /// https://dev.vk.com/method/messages.setActivity
+    pub async fn set_activity(&self, peer_id: i64, activity_type: ActivityType) -> Result<()> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        params.insert("type", activity_type.as_str().to_string());
+
+        let _: i32 = self.client.request("messages.setActivity", params).await?;
+        Ok(())
+    }
+
+    // ========== Reactions ==========
+
+    /// Send reaction to message
+    ///
+    /// # VK API
+    /// Method: messages.sendReaction
+    /// https://dev.vk.com/method/messages.sendReaction
+    pub async fn send_reaction(&self, peer_id: i64, cmid: i64, reaction_id: i64) -> Result<()> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        params.insert("cmid", cmid.to_string());
+        params.insert("reaction_id", reaction_id.to_string());
+
+        let _: i32 = self
+            .client
+            .request("messages.sendReaction", params)
+            .await?;
+        Ok(())
+    }
+
+    /// Get available reaction assets
+    ///
+    /// # VK API
+    /// Method: messages.getReactionsAssets
+    /// https://dev.vk.com/method/messages.getReactionsAssets
+    pub async fn get_reactions_assets(&self) -> Result<Vec<Reaction>> {
+        let params = HashMap::new();
+
+        #[derive(Debug, serde::Deserialize)]
+        struct Response {
+            items: Vec<Reaction>,
+        }
+
+        let response: Response = self
+            .client
+            .request("messages.getReactionsAssets", params)
+            .await?;
+        Ok(response.items)
+    }
+
+    // ========== Upload Methods ==========
+
+    /// Send photo to peer (combines upload + save + send)
+    ///
+    /// This is a convenience method that:
+    /// 1. Gets upload server
+    /// 2. Uploads photo
+    /// 3. Saves photo
+    /// 4. Sends message with photo attachment
+    pub async fn send_photo(&self, peer_id: i64, photo_path: &Path) -> Result<i64> {
+        // Get upload server
+        let mut server_params = HashMap::new();
+        server_params.insert("peer_id", peer_id.to_string());
+        let upload_server: UploadServer = self
+            .client
+            .request("photos.getMessagesUploadServer", server_params)
+            .await?;
+
+        // Upload photo
+        let (boundary, body) = build_multipart_body(photo_path, "photo")?;
+        let response = self
+            .client
+            .http_client()
+            .post(&upload_server.upload_url)
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(body)
+            .send()
+            .await
+            .context("Photo upload failed")?;
+
+        let response_text = response.text().await?;
+
+        // Parse upload response
+        let upload_json: serde_json::Value =
+            serde_json::from_str(&response_text).context("Failed to parse photo upload response")?;
+
+        // Save photo
+        let mut save_params: HashMap<&str, String> = HashMap::new();
+        if let Some(obj) = upload_json.as_object() {
+            for (key, value) in obj {
+                let value_str = match value {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    _ => value.to_string(),
+                };
+                save_params.insert(key, value_str);
+            }
+        }
+
+        let saved: Vec<SavedPhoto> = self
+            .client
+            .request("photos.saveMessagesPhoto", save_params)
+            .await?;
+
+        let attachment = saved
+            .first()
+            .map(|p| format!("photo{}_{}", p.owner_id, p.id))
+            .context("No saved photo returned")?;
+
+        // Send message with attachment
+        self.send_with_attachment(peer_id, "", &attachment).await
+    }
+
+    /// Send document to peer (combines upload + save + send)
+    ///
+    /// This is a convenience method that:
+    /// 1. Gets upload server
+    /// 2. Uploads document
+    /// 3. Saves document
+    /// 4. Sends message with document attachment
+    pub async fn send_doc(&self, peer_id: i64, doc_path: &Path) -> Result<i64> {
+        // Get upload server
+        let mut params = HashMap::new();
+        params.insert("type", "doc".to_string());
+        params.insert("peer_id", peer_id.to_string());
+        let upload_server: UploadServer = self
+            .client
+            .request("docs.getMessagesUploadServer", params)
+            .await?;
+
+        // Upload doc
+        let (boundary, body) = build_multipart_body(doc_path, "file")?;
+        let response = self
+            .client
+            .http_client()
+            .post(&upload_server.upload_url)
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(body)
+            .send()
+            .await
+            .context("Doc upload failed")?;
+
+        let response_text = response.text().await?;
+
+        // Parse upload response
+        let upload_json: serde_json::Value =
+            serde_json::from_str(&response_text).context("Failed to parse doc upload response")?;
+
+        // Save doc
+        let mut save_params: HashMap<&str, String> = HashMap::new();
+        if let Some(obj) = upload_json.as_object() {
+            for (key, value) in obj {
+                let value_str = match value {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    _ => value.to_string(),
+                };
+                save_params.insert(key, value_str);
+            }
+        }
+
+        let saved: Vec<SavedDoc> = self.client.request("docs.save", save_params).await?;
+
+        let attachment = saved
+            .first()
+            .map(|d| format!("doc{}_{}", d.owner_id, d.id))
+            .context("No saved doc returned")?;
+
+        // Send message with attachment
+        self.send_with_attachment(peer_id, "", &attachment).await
+    }
+}
+
+/// Activity types for setActivity
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivityType {
+    Typing,
+    AudioMessage,
+}
+
+impl ActivityType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ActivityType::Typing => "typing",
+            ActivityType::AudioMessage => "audiomessage",
+        }
+    }
+}
+
+/// Generate random message ID for VK API
+fn generate_random_id() -> i64 {
+    rand::thread_rng().r#gen()
+}
+
+/// Build a simple multipart/form-data body with a single file part
+fn build_multipart_body(path: &Path, field_name: &str) -> Result<(String, Vec<u8>)> {
+    use std::io::Write;
+
+    let boundary = format!("vk_api_boundary_{}", generate_random_id());
+    let mut body = Vec::new();
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file.bin");
+    let data = std::fs::read(path)?;
+
+    write!(body, "--{}\r\n", boundary)?;
+    write!(
+        body,
+        "Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"\r\n",
+        field_name, filename
+    )?;
+    write!(body, "Content-Type: application/octet-stream\r\n\r\n")?;
+    body.extend_from_slice(&data);
+    write!(body, "\r\n--{}--\r\n", boundary)?;
+
+    Ok((boundary, body))
+}
+
+/// Reaction type
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct Reaction {
+    pub reaction_id: i64,
+    pub title: String,
+}

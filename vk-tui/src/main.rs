@@ -106,7 +106,7 @@ fn spawn_action_handler(
 
 /// Load conversations from VK API
 async fn load_conversations(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>) {
-    match client.get_conversations(0, 50).await {
+    match client.messages().get_conversations(0, 50).await {
         Ok(response) => {
             let chats: Vec<Chat> = response
                 .items
@@ -216,7 +216,7 @@ fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
 
 /// Load messages from VK API
 async fn load_messages(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedSender<Message>) {
-    match client.get_history(peer_id, 0, 50).await {
+    match client.messages().get_history(peer_id, 0, 50).await {
         Ok(response) => {
             // Messages come in reverse order (newest first), so reverse them
             let messages: Vec<ChatMessage> = response
@@ -275,7 +275,7 @@ async fn send_message(
     text: String,
     tx: mpsc::UnboundedSender<Message>,
 ) {
-    match client.send_message(peer_id, &text).await {
+    match client.messages().send(peer_id, &text).await {
         Ok(msg_id) => {
             let _ = tx.send(Message::MessageSent(msg_id));
         }
@@ -295,7 +295,7 @@ async fn send_photo_attachment(
     path: String,
     tx: mpsc::UnboundedSender<Message>,
 ) {
-    match client.send_photo(peer_id, Path::new(&path)).await {
+    match client.messages().send_photo(peer_id, Path::new(&path)).await {
         Ok(msg_id) => {
             let _ = tx.send(Message::MessageSent(msg_id));
         }
@@ -312,7 +312,7 @@ async fn send_doc_attachment(
     path: String,
     tx: mpsc::UnboundedSender<Message>,
 ) {
-    match client.send_doc(peer_id, Path::new(&path)).await {
+    match client.messages().send_doc(peer_id, Path::new(&path)).await {
         Ok(msg_id) => {
             let _ = tx.send(Message::MessageSent(msg_id));
         }
@@ -379,7 +379,7 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
     tracing::info!("Starting Long Poll...");
 
     // Get Long Poll server
-    let mut server = match client.get_long_poll_server().await {
+    let mut server = match client.longpoll().get_server().await {
         Ok(s) => {
             tracing::info!("Got Long Poll server: {}", s.server);
             s
@@ -394,7 +394,7 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
     let _ = tx.send(Message::VkEvent(VkEvent::ConnectionStatus(true)));
 
     loop {
-        match client.long_poll(&server).await {
+        match client.longpoll().poll(&server).await {
             Ok(response) => {
                 // Handle failed responses
                 if let Some(failed) = response.failed {
@@ -407,7 +407,7 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                         }
                         2 | 3 => {
                             // Need to get new server
-                            match client.get_long_poll_server().await {
+                            match client.longpoll().get_server().await {
                                 Ok(new_server) => server = new_server,
                                 Err(e) => {
                                     let _ = tx.send(Message::Error(format!(
@@ -520,7 +520,7 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                 tokio::time::sleep(Duration::from_secs(5)).await;
 
                 // Try to reconnect
-                match client.get_long_poll_server().await {
+                match client.longpoll().get_server().await {
                     Ok(new_server) => {
                         server = new_server;
                         let _ = tx.send(Message::VkEvent(VkEvent::ConnectionStatus(true)));
@@ -534,7 +534,7 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
 
 /// Mark messages as read for a peer
 async fn mark_as_read(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedSender<Message>) {
-    if let Err(e) = client.mark_as_read(peer_id).await {
+    if let Err(e) = client.messages().mark_as_read(peer_id).await {
         let _ = tx.send(Message::Error(format!("Failed to mark as read: {}", e)));
     }
 }
