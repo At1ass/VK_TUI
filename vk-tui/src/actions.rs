@@ -10,9 +10,19 @@ use crate::mapper::{map_attachment, map_history_message, map_reply};
 use crate::message::Message;
 use crate::state::AttachmentInfo;
 
-pub async fn load_conversations(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>) {
-    match client.messages().get_conversations(0, 50).await {
+pub async fn load_conversations(
+    client: Arc<VkClient>,
+    offset: u32,
+    tx: mpsc::UnboundedSender<Message>,
+) {
+    const COUNT: u32 = 50;
+
+    match client.messages().get_conversations(offset, COUNT).await {
         Ok(response) => {
+            let total_count = response.count as u32;
+            let loaded_count = response.items.len() as u32;
+            let has_more = offset + loaded_count < total_count;
+
             let chats: Vec<crate::state::Chat> = response
                 .items
                 .into_iter()
@@ -32,7 +42,12 @@ pub async fn load_conversations(client: Arc<VkClient>, tx: mpsc::UnboundedSender
                 })
                 .collect();
 
-            let _ = tx.send(Message::ConversationsLoaded(chats, response.profiles));
+            let _ = tx.send(Message::ConversationsLoaded {
+                chats,
+                profiles: response.profiles,
+                total_count,
+                has_more,
+            });
         }
         Err(e) => {
             let _ = tx.send(Message::Error(format!("Failed to load chats: {}", e)));
@@ -43,10 +58,17 @@ pub async fn load_conversations(client: Arc<VkClient>, tx: mpsc::UnboundedSender
 pub async fn load_messages(
     client: Arc<VkClient>,
     peer_id: i64,
+    offset: u32,
     tx: mpsc::UnboundedSender<Message>,
 ) {
-    match client.messages().get_history(peer_id, 0, 50).await {
+    const COUNT: u32 = 50;
+
+    match client.messages().get_history(peer_id, offset, COUNT).await {
         Ok(response) => {
+            let total_count = response.count as u32;
+            let loaded_count = response.items.len() as u32;
+            let has_more = offset + loaded_count < total_count;
+
             let out_read = response
                 .conversations
                 .first()
@@ -60,7 +82,13 @@ pub async fn load_messages(
                 .map(|msg| map_history_message(&response.profiles, &msg, out_read))
                 .collect();
 
-            let _ = tx.send(Message::MessagesLoaded(messages, response.profiles));
+            let _ = tx.send(Message::MessagesLoaded {
+                peer_id,
+                messages,
+                profiles: response.profiles,
+                total_count,
+                has_more,
+            });
         }
         Err(e) => {
             let _ = tx.send(Message::Error(format!("Failed to load messages: {}", e)));

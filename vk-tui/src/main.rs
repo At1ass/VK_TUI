@@ -81,11 +81,11 @@ fn spawn_action_handler(
             let tx = message_tx.clone();
 
             match action {
-                AsyncAction::LoadConversations => {
-                    tokio::spawn(actions::load_conversations(client, tx));
+                AsyncAction::LoadConversations(offset) => {
+                    tokio::spawn(actions::load_conversations(client, offset, tx));
                 }
-                AsyncAction::LoadMessages(peer_id) => {
-                    tokio::spawn(actions::load_messages(client, peer_id, tx));
+                AsyncAction::LoadMessages(peer_id, offset) => {
+                    tokio::spawn(actions::load_messages(client, peer_id, offset, tx));
                 }
                 AsyncAction::SendMessage(peer_id, text) => {
                     tokio::spawn(actions::send_message(client, peer_id, text, tx));
@@ -283,7 +283,8 @@ async fn main() -> Result<()> {
     // If already authenticated, load conversations
     if app.vk_client.is_some() {
         app.is_loading = true;
-        app.send_action(AsyncAction::LoadConversations);
+        app.chats_pagination.is_loading = true;
+        app.send_action(AsyncAction::LoadConversations(0));
         app.send_action(AsyncAction::StartLongPoll);
     }
 
@@ -326,7 +327,8 @@ async fn main() -> Result<()> {
                             app.set_action_tx(new_action_tx);
                             spawn_action_handler(new_action_rx, message_tx.clone(), app.vk_client.clone());
                             app.is_loading = true;
-                            app.send_action(AsyncAction::LoadConversations);
+                            app.chats_pagination.is_loading = true;
+                            app.send_action(AsyncAction::LoadConversations(0));
                             app.send_action(AsyncAction::StartLongPoll);
                         }
                     }

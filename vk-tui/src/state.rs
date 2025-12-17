@@ -134,10 +134,52 @@ pub struct ChatMessage {
 }
 
 /// Async actions to be performed in background
+
+/// Pagination state for messages in a specific chat
 #[derive(Debug, Clone)]
+pub struct MessagesPagination {
+    pub peer_id: i64,
+    pub offset: u32,
+    pub total_count: Option<u32>,
+    pub is_loading: bool,
+    pub has_more: bool,
+}
+
+impl MessagesPagination {
+    pub fn new(peer_id: i64) -> Self {
+        Self {
+            peer_id,
+            offset: 0,
+            total_count: None,
+            is_loading: false,
+            has_more: true,
+        }
+    }
+}
+
+/// Pagination state for chat list
+#[derive(Debug, Clone)]
+pub struct ChatsPagination {
+    pub offset: u32,
+    pub total_count: Option<u32>,
+    pub is_loading: bool,
+    pub has_more: bool,
+}
+
+impl Default for ChatsPagination {
+    fn default() -> Self {
+        Self {
+            offset: 0,
+            total_count: None,
+            is_loading: false,
+            has_more: true,
+        }
+    }
+}
+
 pub enum AsyncAction {
-    LoadConversations,
-    LoadMessages(i64),                  // peer_id
+    LoadConversations(u32),             // offset
+    LoadMessages(i64, u32),             // peer_id, offset
     SendMessage(i64, String),           // peer_id, text
     SendForward(i64, Vec<i64>, String), // peer_id, message_ids, comment
     SendReply(i64, i64, String),        // peer_id, reply_to_msg_id, text
@@ -181,6 +223,10 @@ pub struct App {
     pub messages_scroll: usize,
     pub reply_to: Option<(i64, ReplyPreview)>,
 
+    // Pagination state
+    pub chats_pagination: ChatsPagination,
+    pub messages_pagination: Option<MessagesPagination>,
+
     // Input state
     pub input: String,
     pub input_cursor: usize,
@@ -220,6 +266,8 @@ impl Default for App {
             messages: Vec::new(),
             messages_scroll: 0,
             reply_to: None,
+            chats_pagination: ChatsPagination::default(),
+            messages_pagination: None,
             input: String::new(),
             input_cursor: 0,
             command_input: String::new(),

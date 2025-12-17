@@ -124,9 +124,20 @@ pub enum Message {
     /// VK API event
     VkEvent(VkEvent),
     /// Conversations loaded from API
-    ConversationsLoaded(Vec<Chat>, Vec<User>),
+    ConversationsLoaded {
+        chats: Vec<Chat>,
+        profiles: Vec<User>,
+        total_count: u32,
+        has_more: bool,
+    },
     /// Messages loaded from API
-    MessagesLoaded(Vec<ChatMessage>, Vec<User>),
+    MessagesLoaded {
+        peer_id: i64,
+        messages: Vec<ChatMessage>,
+        profiles: Vec<User>,
+        total_count: u32,
+        has_more: bool,
+    },
     /// Message sent successfully (message_id, cmid)
     MessageSent(i64, i64),
     /// Message edited successfully

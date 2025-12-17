@@ -6,8 +6,9 @@ use crate::event::VkEvent;
 use crate::input::{delete_word, insert_char_at, remove_char_at};
 use crate::message::Message;
 use crate::state::{
-    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, CompletionState,
-    DeliveryStatus, Focus, ForwardStage, Mode, ReplyPreview, RunningState, Screen,
+    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, ChatsPagination,
+    CompletionState, DeliveryStatus, Focus, ForwardStage, MessagesPagination, Mode, ReplyPreview,
+    RunningState, Screen,
 };
 use vk_api::VkClient;
 
@@ -41,8 +42,37 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         Message::NavigateUp => {
             if app.screen == Screen::Main {
                 match app.focus {
-                    Focus::ChatList => app.selected_chat = app.selected_chat.saturating_sub(1),
-                    Focus::Messages => app.messages_scroll = app.messages_scroll.saturating_sub(1),
+                    Focus::ChatList => {
+                        app.selected_chat = app.selected_chat.saturating_sub(1);
+                    }
+                    Focus::Messages => {
+                        // Check if we're at the top and can load more older messages
+                        if app.messages_scroll == 0 {
+                            let should_load = app
+                                .messages_pagination
+                                .as_ref()
+                                .map(|p| p.has_more && !p.is_loading)
+                                .unwrap_or(false);
+
+                            if should_load {
+                                let offset = app
+                                    .messages_pagination
+                                    .as_ref()
+                                    .map(|p| p.offset)
+                                    .unwrap_or(0);
+
+                                if let Some(peer_id) = app.current_peer_id {
+                                    if let Some(pagination) = &mut app.messages_pagination {
+                                        pagination.is_loading = true;
+                                    }
+                                    app.status = Some("Loading older messages...".into());
+                                    app.send_action(AsyncAction::LoadMessages(peer_id, offset));
+                                }
+                            }
+                        } else {
+                            app.messages_scroll = app.messages_scroll.saturating_sub(1);
+                        }
+                    }
                     Focus::Input => {}
                 }
             }
@@ -53,6 +83,24 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     Focus::ChatList => {
                         if app.selected_chat + 1 < app.chats.len() {
                             app.selected_chat += 1;
+                        } else {
+                            // At the end of chat list - try to load more
+                            if app.chats_pagination.has_more
+                                && !app.chats_pagination.is_loading
+                            {
+                                app.chats_pagination.is_loading = true;
+                                app.status = Some(format!(
+                                    "Loading more chats ({}/{})",
+                                    app.chats.len(),
+                                    app.chats_pagination
+                                        .total_count
+                                        .map(|t| t.to_string())
+                                        .unwrap_or_else(|| "?".to_string())
+                                ));
+                                app.send_action(AsyncAction::LoadConversations(
+                                    app.chats_pagination.offset,
+                                ));
+                            }
                         }
                     }
                     Focus::Messages => {
@@ -90,7 +138,10 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     app.vk_client = Some(Arc::new(VkClient::new(token.to_string())));
                     app.screen = Screen::Main;
                     app.status = Some("Authenticated successfully".into());
-                    app.send_action(AsyncAction::LoadConversations);
+                    // Initialize chats pagination and load first page
+                    app.chats_pagination = ChatsPagination::default();
+                    app.chats_pagination.is_loading = true;
+                    app.send_action(AsyncAction::LoadConversations(0));
                     app.send_action(AsyncAction::StartLongPoll);
                 } else {
                     app.status = Some("Failed to parse token from URL".into());
@@ -103,7 +154,12 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 app.current_peer_id = Some(peer_id);
                 app.messages.clear();
                 app.is_loading = true;
-                app.send_action(AsyncAction::LoadMessages(peer_id));
+                // Initialize messages pagination and load first page
+                app.messages_pagination = Some(MessagesPagination::new(peer_id));
+                if let Some(pagination) = &mut app.messages_pagination {
+                    pagination.is_loading = true;
+                }
+                app.send_action(AsyncAction::LoadMessages(peer_id, 0));
                 app.send_action(AsyncAction::MarkAsRead(peer_id));
                 app.status = Some(format!("Loading chat: {}", title));
                 app.focus = Focus::Messages;
@@ -701,19 +757,80 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
 
         // Messages from VK events and async actions
         Message::VkEvent(event) => return handle_vk_event(app, event),
-        Message::ConversationsLoaded(chats, users) => {
+        Message::ConversationsLoaded {
+            chats,
+            profiles,
+            total_count,
+            has_more,
+        } => {
             app.is_loading = false;
-            app.chats = chats;
-            for user in users {
+
+            // Append or replace chats based on offset
+            if app.chats_pagination.offset == 0 {
+                // First load - replace
+                app.chats = chats;
+            } else {
+                // Pagination - append
+                app.chats.extend(chats);
+            }
+
+            // Update pagination state
+            app.chats_pagination.offset = app.chats.len() as u32;
+            app.chats_pagination.total_count = Some(total_count);
+            app.chats_pagination.has_more = has_more;
+            app.chats_pagination.is_loading = false;
+
+            // Update users cache
+            for user in profiles {
                 app.users.insert(user.id, user);
             }
-            app.status = Some(format!("Loaded {} conversations", app.chats.len()));
+
+            app.status = Some(format!(
+                "Loaded {} of {} conversations",
+                app.chats.len(),
+                total_count
+            ));
         }
-        Message::MessagesLoaded(messages, users) => {
+        Message::MessagesLoaded {
+            peer_id,
+            messages,
+            profiles,
+            total_count,
+            has_more,
+        } => {
             app.is_loading = false;
-            app.messages = messages;
-            app.messages_scroll = app.messages.len().saturating_sub(1);
-            if let Some(peer_id) = app.current_peer_id {
+
+            // Append or replace messages based on offset
+            if let Some(pagination) = &app.messages_pagination {
+                if pagination.offset == 0 {
+                    // First load - replace
+                    app.messages = messages;
+                    app.messages_scroll = app.messages.len().saturating_sub(1);
+                } else {
+                    // Pagination - prepend older messages
+                    let loaded_count = messages.len();
+                    let mut new_messages = messages;
+                    new_messages.extend(app.messages.drain(..));
+                    app.messages = new_messages;
+                    // Adjust scroll to maintain position
+                    app.messages_scroll = app.messages_scroll.saturating_add(loaded_count);
+                }
+
+                // Update pagination state
+                if let Some(pagination) = &mut app.messages_pagination {
+                    pagination.offset = app.messages.len() as u32;
+                    pagination.total_count = Some(total_count);
+                    pagination.has_more = has_more;
+                    pagination.is_loading = false;
+                }
+            } else {
+                // No pagination state - first load
+                app.messages = messages;
+                app.messages_scroll = app.messages.len().saturating_sub(1);
+            }
+
+            // Mark messages as read
+            if Some(peer_id) == app.current_peer_id {
                 if let Some(chat) = app.chats.iter_mut().find(|c| c.id == peer_id) {
                     chat.unread_count = 0;
                 }
@@ -723,7 +840,9 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     }
                 }
             }
-            for user in users {
+
+            // Update users cache
+            for user in profiles {
                 app.users.insert(user.id, user);
             }
         }
