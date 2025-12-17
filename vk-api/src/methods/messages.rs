@@ -84,6 +84,7 @@ impl<'a> MessagesApi<'a> {
 
         #[derive(Debug, serde::Deserialize)]
         struct Response {
+            #[allow(dead_code)]
             count: i32,
             items: Vec<Conversation>,
         }
@@ -427,6 +428,7 @@ impl<'a> MessagesApi<'a> {
 
         #[derive(Debug, serde::Deserialize)]
         struct Response {
+            #[allow(dead_code)]
             count: i32,
             items: Vec<Conversation>,
         }

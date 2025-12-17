@@ -63,6 +63,7 @@ pub struct Chat {
     pub id: i64,
     pub title: String,
     pub last_message: String,
+    #[allow(dead_code)]
     pub last_message_time: i64,
     pub unread_count: u32,
     pub is_online: bool,
@@ -133,7 +134,8 @@ pub enum AsyncAction {
     SendDoc(i64, String),   // peer_id, path
     DownloadAttachments(Vec<AttachmentInfo>),
     EditMessage(i64, i64, Option<i64>, String), // peer_id, message_id, cmid, text
-    DeleteMessage(i64, i64, bool),              // peer_id, message_id, delete_for_all
+    #[allow(dead_code)]
+    DeleteMessage(i64, i64, bool), // peer_id, message_id, delete_for_all
     FetchMessageById(i64),                      // message_id - to get cmid after sending
 }
 

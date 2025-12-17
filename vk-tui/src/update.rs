@@ -1,7 +1,9 @@
 use std::process::Command;
 use std::sync::Arc;
 
+use crate::commands::handle_command;
 use crate::event::VkEvent;
+use crate::input::{delete_word, insert_char_at, remove_char_at};
 use crate::message::Message;
 use crate::state::{
     App, AsyncAction, AttachmentInfo, AttachmentKind, ChatMessage, DeliveryStatus, Focus, Mode,
@@ -675,20 +677,6 @@ fn handle_command(app: &mut App, cmd: &str) -> Option<Message> {
 }
 
 // Helpers moved from app.rs
-#[allow(dead_code)]
-fn truncate_str(s: &str, max_len: usize) -> String {
-    if s.chars().count() <= max_len {
-        s.to_string()
-    } else {
-        format!(
-            "{}...",
-            s.chars()
-                .take(max_len.saturating_sub(3))
-                .collect::<String>()
-        )
-    }
-}
-
 fn chrono_timestamp() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -701,44 +689,6 @@ fn is_auth_error(msg: &str) -> bool {
         || msg.contains("VK API error 7")
         || msg.contains("VK API error 179")
         || msg.to_lowercase().contains("authorization failed")
-}
-
-// === Input helpers ===
-fn delete_word(input: &mut String, cursor: &mut usize) {
-    while *cursor > 0 && char_at(input, *cursor - 1).is_some_and(|c| c.is_whitespace()) {
-        *cursor -= 1;
-        remove_char_at(input, *cursor);
-    }
-    while *cursor > 0 && char_at(input, *cursor - 1).is_some_and(|c| !c.is_whitespace()) {
-        *cursor -= 1;
-        remove_char_at(input, *cursor);
-    }
-}
-
-// Minimal copies of helpers to keep update.rs self-contained
-fn char_to_byte_index(s: &str, char_idx: usize) -> usize {
-    s.char_indices()
-        .nth(char_idx)
-        .map(|(i, _)| i)
-        .unwrap_or(s.len())
-}
-
-fn insert_char_at(s: &mut String, char_pos: usize, c: char) {
-    let byte_idx = char_to_byte_index(s, char_pos);
-    s.insert(byte_idx, c);
-}
-
-fn remove_char_at(s: &mut String, char_pos: usize) -> Option<char> {
-    let byte_idx = char_to_byte_index(s, char_pos);
-    if byte_idx < s.len() {
-        Some(s.remove(byte_idx))
-    } else {
-        None
-    }
-}
-
-fn char_at(s: &str, char_pos: usize) -> Option<char> {
-    s.chars().nth(char_pos)
 }
 
 // Command parsing helpers (minimal inline)

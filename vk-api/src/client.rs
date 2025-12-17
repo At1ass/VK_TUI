@@ -64,6 +64,7 @@ impl VkClient {
     }
 
     /// Get access token (for internal use)
+    #[allow(dead_code)]
     pub(crate) fn token(&self) -> &str {
         &self.access_token
     }
