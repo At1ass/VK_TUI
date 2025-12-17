@@ -381,7 +381,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         }
         Message::ForwardViewDown => {
             if let Some(view) = app.forward_view.as_mut() {
-                if !view.items.is_empty() && view.selected + 1 < view.items.len() {
+                let total = forwards_len(&view.items);
+                if total > 0 && view.selected + 1 < total {
                     view.selected += 1;
                 }
             }
@@ -1025,4 +1026,8 @@ pub fn flatten_forwards(
         }
     }
     out
+}
+
+fn forwards_len(items: &[crate::state::ForwardItem]) -> usize {
+    items.iter().map(|i| 1 + forwards_len(&i.nested)).sum()
 }
