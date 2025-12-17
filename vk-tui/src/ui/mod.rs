@@ -20,6 +20,11 @@ pub fn view(app: &App, frame: &mut Frame) {
         render_forward_popup(app, frame);
     }
 
+    // Forwarded-view popup on top
+    if app.forward_view.is_some() {
+        render_forward_view_popup(app, frame);
+    }
+
     // Render help popup on top if visible
     if app.show_help {
         render_help_popup(app, frame);
@@ -629,6 +634,57 @@ fn render_forward_popup(app: &App, frame: &mut Frame) {
             frame.set_cursor_position((chunks[1].x + cursor_x as u16 + 1, chunks[1].y + 1));
         }
     }
+}
+
+fn render_forward_view_popup(app: &App, frame: &mut Frame) {
+    let Some(view) = &app.forward_view else {
+        return;
+    };
+
+    let area = frame.area();
+    let width = (area.width as f32 * 0.7).max(50.0).min(110.0) as u16;
+    let height = (area.height as f32 * 0.7).max(12.0).min(30.0) as u16;
+    let popup_area = centered_rect(width, height, area);
+
+    frame.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .title(" Forwarded messages (Esc to close) ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    if view.items.is_empty() {
+        let empty = Paragraph::new("No forwarded messages")
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(Alignment::Center);
+        frame.render_widget(empty, inner);
+        return;
+    }
+
+    let items: Vec<ListItem> = view
+        .items
+        .iter()
+        .map(|f| {
+            ListItem::new(Line::from(vec![
+                Span::styled(&f.from, Style::default().fg(Color::Cyan)),
+                Span::raw(": "),
+                Span::raw(truncate_str(&f.text, 120)),
+            ]))
+        })
+        .collect();
+
+    let list = List::new(items).highlight_style(
+        Style::default()
+            .bg(Color::Blue)
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    );
+
+    let mut state = ListState::default();
+    state.select(Some(view.selected));
+    frame.render_stateful_widget(list, inner, &mut state);
 }
 
 /// Render help popup
