@@ -298,10 +298,16 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
             for att in &msg.attachments {
                 let label = match &att.kind {
                     crate::app::AttachmentKind::Photo => "[photo]".to_string(),
-                    crate::app::AttachmentKind::File => "[file]".to_string(),
+                    crate::app::AttachmentKind::Doc => "[file]".to_string(),
+                    crate::app::AttachmentKind::Link => "[link]".to_string(),
+                    crate::app::AttachmentKind::Audio => "[audio]".to_string(),
+                    crate::app::AttachmentKind::Sticker => "[sticker]".to_string(),
                     crate::app::AttachmentKind::Other(k) => format!("[{}]", k),
                 };
                 let mut detail = format!("{} {}", label, att.title);
+                if let Some(sub) = &att.subtitle {
+                    detail.push_str(&format!(" — {}", sub));
+                }
                 if let Some(size) = att.size {
                     let kb = size as f64 / 1024.0;
                     detail.push_str(&format!(" ({:.1} KB)", kb));

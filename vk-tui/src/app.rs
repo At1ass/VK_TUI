@@ -190,12 +190,16 @@ pub struct AttachmentInfo {
     pub title: String,
     pub url: Option<String>,
     pub size: Option<u64>,
+    pub subtitle: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub enum AttachmentKind {
     Photo,
-    File,
+    Doc,
+    Link,
+    Audio,
+    Sticker,
     Other(String),
 }
 
@@ -607,10 +611,11 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                         is_edited: false,
                                         delivery: DeliveryStatus::Pending,
                                         attachments: vec![AttachmentInfo {
-                                            kind: AttachmentKind::File,
+                                            kind: AttachmentKind::Doc,
                                             title: title.clone(),
                                             url: None,
                                             size: None,
+                                            subtitle: None,
                                         }],
                                         reply: None,
                                         fwd_count: 0,
@@ -644,6 +649,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                             title: title.clone(),
                                             url: None,
                                             size: None,
+                                            subtitle: None,
                                         }],
                                         reply: None,
                                         fwd_count: 0,
@@ -677,6 +683,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                                 title: title.clone(),
                                                 url: None,
                                                 size: None,
+                                                subtitle: None,
                                             }],
                                             reply: None,
                                             fwd_count: 0,

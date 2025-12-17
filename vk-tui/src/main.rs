@@ -218,22 +218,89 @@ fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
                 title: "Photo".into(),
                 url: best,
                 size: None,
+                subtitle: None,
             }
         }
         "doc" => {
             let doc = att.doc.unwrap_or_default();
             AttachmentInfo {
-                kind: AttachmentKind::File,
+                kind: AttachmentKind::Doc,
                 title: doc.title.unwrap_or_else(|| "Document".to_string()),
                 url: doc.url,
                 size: doc.size,
+                subtitle: doc.extension,
             }
         }
+        "link" => {
+            let link = att.other.get("link").and_then(|v| v.as_object());
+            let title = link
+                .and_then(|o| o.get("title"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Link")
+                .to_string();
+            let url = link
+                .and_then(|o| o.get("url"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            AttachmentInfo {
+                kind: AttachmentKind::Link,
+                title,
+                url,
+                size: None,
+                subtitle: None,
+            }
+        }
+        "audio" => {
+            let audio = att.other.get("audio").and_then(|v| v.as_object());
+            let artist = audio
+                .and_then(|o| o.get("artist"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let title = audio
+                .and_then(|o| o.get("title"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Audio");
+            let full_title = if artist.is_empty() {
+                title.to_string()
+            } else {
+                format!("{} — {}", artist, title)
+            };
+            AttachmentInfo {
+                kind: AttachmentKind::Audio,
+                title: full_title,
+                url: None,
+                size: None,
+                subtitle: None,
+            }
+        }
+        "sticker" => AttachmentInfo {
+            kind: AttachmentKind::Sticker,
+            title: "Sticker".into(),
+            url: att
+                .other
+                .get("sticker")
+                .and_then(|v| v.get("images"))
+                .and_then(|imgs| imgs.as_array())
+                .and_then(|arr| {
+                    arr.iter()
+                        .filter_map(|img| {
+                            img.get("url").and_then(|u| u.as_str()).map(|s| {
+                                let w = img.get("width").and_then(|v| v.as_u64()).unwrap_or(0);
+                                (s.to_string(), w)
+                            })
+                        })
+                        .max_by_key(|(_, w)| *w)
+                        .map(|(u, _)| u)
+                }),
+            size: None,
+            subtitle: None,
+        },
         other => AttachmentInfo {
             kind: AttachmentKind::Other(other.to_string()),
             title: other.to_string(),
             url: None,
             size: None,
+            subtitle: None,
         },
     }
 }
