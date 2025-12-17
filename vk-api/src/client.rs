@@ -114,12 +114,20 @@ impl VkClient {
 fn truncate_body(text: &str) -> String {
     const MAX_LOG_BODY: usize = 4096;
     if text.len() <= MAX_LOG_BODY {
-        text.to_string()
-    } else {
-        format!(
-            "{}...(truncated, {} bytes)",
-            &text[..MAX_LOG_BODY],
-            text.len()
-        )
+        return text.to_string();
     }
+
+    // Truncate on a char boundary to avoid UTF-8 panic
+    let mut end = 0;
+    for (idx, _) in text.char_indices() {
+        if idx > MAX_LOG_BODY {
+            break;
+        }
+        end = idx;
+    }
+    if end == 0 {
+        end = MAX_LOG_BODY.min(text.len());
+    }
+
+    format!("{}...(truncated, {} bytes)", &text[..end], text.len())
 }
