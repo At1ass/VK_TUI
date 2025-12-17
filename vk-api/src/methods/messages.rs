@@ -301,10 +301,15 @@ impl<'a> MessagesApi<'a> {
     ) -> Result<()> {
         let mut params = HashMap::new();
         params.insert("peer_id", peer_id.to_string());
-        params.insert("message_id", message_id.to_string());
-        if let Some(cmid) = cmid {
-            params.insert("cmid", cmid.to_string());
-        }
+        match cmid {
+            Some(cmid) => {
+                // VK requires either message_id OR cmid, not both
+                params.insert("cmid", cmid.to_string());
+            }
+            None => {
+                params.insert("message_id", message_id.to_string());
+            }
+        };
         params.insert("message", message.to_string());
 
         let _: i32 = self.client.request("messages.edit", params).await?;
