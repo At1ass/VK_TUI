@@ -1,6 +1,7 @@
 mod actions;
 mod app;
 mod event;
+mod longpoll;
 mod mapper;
 mod message;
 mod state;
@@ -21,6 +22,7 @@ use tokio::sync::mpsc;
 
 use app::update;
 use event::{Event, VkEvent};
+use longpoll::handle_update;
 use message::Message;
 use state::{App, AsyncAction, Screen};
 use vk_api::{User, VkClient};
@@ -214,123 +216,8 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                     tracing::debug!("Got {} updates", updates.len());
                     for update in updates {
                         tracing::trace!("Update: {:?}", update);
-                        if let Some(arr) = update.as_array()
-                            && let Some(event_type) = arr.first().and_then(|v| v.as_i64())
-                        {
-                            tracing::debug!("Event type: {}", event_type);
-                            match event_type {
-                                2 => {
-                                    // Message deleted
-                                    // Format: [2, message_id, flags, peer_id]
-                                    if let (Some(message_id), Some(peer_id)) = (
-                                        arr.get(1).and_then(|v| v.as_i64()),
-                                        arr.get(3).and_then(|v| v.as_i64()),
-                                    ) {
-                                        tracing::info!(
-                                            "Message deleted: {} in {}",
-                                            message_id,
-                                            peer_id
-                                        );
-                                        let _ = tx.send(Message::VkEvent(
-                                            VkEvent::MessageDeletedFromLongPoll {
-                                                peer_id,
-                                                message_id,
-                                            },
-                                        ));
-                                    }
-                                }
-                                4 => {
-                                    // New message
-                                    // Format: [4, message_id, flags, peer_id, timestamp, text, extra, attachments]
-                                    // extra is an object with "from" field containing user_id
-                                    let peer_id = arr.get(3).and_then(|v| v.as_i64());
-                                    let text = arr.get(5).and_then(|v| v.as_str()).unwrap_or("");
-                                    let extra = arr.get(6);
-                                    tracing::debug!(
-                                        "Message event: peer_id={:?}, text={}, extra={:?}",
-                                        peer_id,
-                                        text,
-                                        extra
-                                    );
-
-                                    let from_id = extra
-                                        .and_then(|v| v.as_object())
-                                        .and_then(|obj| obj.get("from"))
-                                        .and_then(|v| v.as_str())
-                                        .and_then(|s| s.parse::<i64>().ok())
-                                        .or(peer_id); // fallback to peer_id for DMs
-
-                                    if let (Some(peer_id), Some(from_id)) = (peer_id, from_id) {
-                                        tracing::info!(
-                                            "New message from {} in {}: {}",
-                                            from_id,
-                                            peer_id,
-                                            text
-                                        );
-                                        let _ = tx.send(Message::VkEvent(VkEvent::NewMessage {
-                                            peer_id,
-                                            text: text.to_string(),
-                                            from_id,
-                                        }));
-                                    }
-                                }
-                                5 => {
-                                    // Message flags changed (used here to detect edits)
-                                    // Format: [5, message_id, flags, peer_id, timestamp, ...]
-                                    if let (Some(message_id), Some(peer_id)) = (
-                                        arr.get(1).and_then(|v| v.as_i64()),
-                                        arr.get(3).and_then(|v| v.as_i64()),
-                                    ) {
-                                        tracing::info!(
-                                            "Message flags changed (possible edit): {} in {}",
-                                            message_id,
-                                            peer_id
-                                        );
-                                        let _ = tx.send(Message::VkEvent(
-                                            VkEvent::MessageEditedFromLongPoll {
-                                                peer_id,
-                                                message_id,
-                                            },
-                                        ));
-                                    }
-                                }
-                                61 => {
-                                    // User typing in private dialog
-                                    // Format: [61, user_id, flags]
-                                    if let Some(user_id) = arr.get(1).and_then(|v| v.as_i64()) {
-                                        let _ = tx.send(Message::VkEvent(VkEvent::UserTyping {
-                                            peer_id: user_id,
-                                            user_id,
-                                        }));
-                                    }
-                                }
-                                62 => {
-                                    // User typing in chat
-                                    // Format: [62, user_id, chat_id]
-                                    if let (Some(user_id), Some(chat_id)) = (
-                                        arr.get(1).and_then(|v| v.as_i64()),
-                                        arr.get(2).and_then(|v| v.as_i64()),
-                                    ) {
-                                        let peer_id = 2000000000 + chat_id;
-                                        let _ = tx.send(Message::VkEvent(VkEvent::UserTyping {
-                                            peer_id,
-                                            user_id,
-                                        }));
-                                    }
-                                }
-                                6 | 7 => {
-                                    // Message read events (incoming/outgoing)
-                                    if let Some(peer_id) = arr.get(1).and_then(|v| v.as_i64()) {
-                                        let message_id =
-                                            arr.get(2).and_then(|v| v.as_i64()).unwrap_or(0);
-                                        let _ = tx.send(Message::VkEvent(VkEvent::MessageRead {
-                                            peer_id,
-                                            message_id,
-                                        }));
-                                    }
-                                }
-                                _ => {}
-                            }
+                        if let Some(event) = handle_update(&update) {
+                            let _ = tx.send(Message::VkEvent(event));
                         }
                     }
                 }

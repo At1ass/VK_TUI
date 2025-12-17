@@ -107,6 +107,7 @@ pub struct ReplyPreview {
 pub struct ChatMessage {
     pub id: i64,
     pub cmid: Option<i64>,
+    #[allow(dead_code)]
     pub from_id: i64,
     pub from_name: String,
     pub text: String,
@@ -151,6 +152,7 @@ pub struct App {
     // VK state
     pub vk_client: Option<std::sync::Arc<vk_api::VkClient>>,
     pub users: HashMap<i64, User>,
+    #[allow(dead_code)]
     pub current_user: Option<User>,
 
     // Chat state

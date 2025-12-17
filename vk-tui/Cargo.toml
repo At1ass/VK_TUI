@@ -16,6 +16,7 @@ vk-api = { path = "../vk-api" }
 # Workspace dependencies
 tokio = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 anyhow = { workspace = true }
 
 # TUI framework
