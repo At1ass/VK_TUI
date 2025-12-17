@@ -1,6 +1,7 @@
 mod app;
 mod event;
 mod message;
+mod state;
 mod ui;
 
 use std::io;
@@ -17,12 +18,13 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::sync::mpsc;
 
-use app::{
-    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, DeliveryStatus,
-    ReplyPreview, Screen, update,
-};
+use app::update;
 use event::{Event, VkEvent};
 use message::Message;
+use state::{
+    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, DeliveryStatus,
+    ReplyPreview, Screen,
+};
 use vk_api::{User, VkClient};
 
 /// Initialize terminal

@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::app::{Chat, ChatMessage, Focus, Mode};
 use crate::event::VkEvent;
+use crate::state::{Chat, ChatMessage, Focus, Mode};
 use vk_api::User;
 
 /// Messages for the TEA update loop

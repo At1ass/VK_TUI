@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 
-use crate::app::{App, DeliveryStatus, Focus, Mode, Screen};
+use crate::state::{App, AttachmentKind, DeliveryStatus, Focus, Mode, Screen};
 
 /// Main view function - renders the entire UI
 pub fn view(app: &App, frame: &mut Frame) {
@@ -297,12 +297,12 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
 
             for att in &msg.attachments {
                 let label = match &att.kind {
-                    crate::app::AttachmentKind::Photo => "[photo]".to_string(),
-                    crate::app::AttachmentKind::Doc => "[file]".to_string(),
-                    crate::app::AttachmentKind::Link => "[link]".to_string(),
-                    crate::app::AttachmentKind::Audio => "[audio]".to_string(),
-                    crate::app::AttachmentKind::Sticker => "[sticker]".to_string(),
-                    crate::app::AttachmentKind::Other(k) => format!("[{}]", k),
+                    AttachmentKind::Photo => "[photo]".to_string(),
+                    AttachmentKind::Doc => "[file]".to_string(),
+                    AttachmentKind::Link => "[link]".to_string(),
+                    AttachmentKind::Audio => "[audio]".to_string(),
+                    AttachmentKind::Sticker => "[sticker]".to_string(),
+                    AttachmentKind::Other(k) => format!("[{}]", k),
                 };
                 let mut detail = format!("{} {}", label, att.title);
                 if let Some(sub) = &att.subtitle {
