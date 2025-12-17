@@ -1,6 +1,8 @@
 mod actions;
 mod app;
+mod commands;
 mod event;
+mod input;
 mod longpoll;
 mod mapper;
 mod message;

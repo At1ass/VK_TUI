@@ -49,12 +49,20 @@ impl VkClient {
             .await
             .context("Failed to send request")?;
 
+        let status = response.status();
         let text = response
             .text()
             .await
             .context("Failed to read response body")?;
-        let vk_response: VkResponse<T> = serde_json::from_str(&text)
-            .map_err(|e| anyhow::anyhow!("Failed to parse response: {}; body: {}", e, text))?;
+        let truncated = truncate_body(&text);
+        let vk_response: VkResponse<T> = serde_json::from_str(&text).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse response (status {}): {}; body: {}",
+                status.as_u16(),
+                e,
+                truncated
+            )
+        })?;
 
         if let Some(error) = vk_response.error {
             anyhow::bail!("VK API error {}: {}", error.error_code, error.error_msg);
@@ -99,5 +107,19 @@ impl VkClient {
     /// Access Account API methods
     pub fn account(&self) -> AccountApi<'_> {
         AccountApi::new(self)
+    }
+}
+
+/// Truncate body for logging to avoid huge payloads
+fn truncate_body(text: &str) -> String {
+    const MAX_LOG_BODY: usize = 4096;
+    if text.len() <= MAX_LOG_BODY {
+        text.to_string()
+    } else {
+        format!(
+            "{}...(truncated, {} bytes)",
+            &text[..MAX_LOG_BODY],
+            text.len()
+        )
     }
 }
