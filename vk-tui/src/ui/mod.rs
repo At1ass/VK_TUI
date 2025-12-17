@@ -256,6 +256,11 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
             let mut first_line = vec![
                 Span::styled(time, Style::default().fg(Color::DarkGray)),
                 Span::raw(" "),
+                if msg.is_pinned {
+                    Span::styled("📌 ", Style::default().fg(Color::Yellow))
+                } else {
+                    Span::raw("")
+                },
                 Span::styled(&msg.from_name, name_style),
                 Span::raw(": "),
                 Span::raw(&msg.text),

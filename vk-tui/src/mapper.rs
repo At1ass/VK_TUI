@@ -154,6 +154,7 @@ pub fn map_history_message(profiles: &[User], msg: &Message, out_read: i64) -> C
         is_outgoing,
         is_read,
         is_edited: msg.update_time.is_some(),
+        is_pinned: false,
         delivery: DeliveryStatus::Sent,
         attachments,
         reply,

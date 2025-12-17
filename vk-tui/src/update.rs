@@ -504,6 +504,7 @@ fn handle_send_command(app: &mut App, peer_id: i64, cmd: SendCommand) -> Option<
                 is_outgoing: true,
                 is_read: false,
                 is_edited: false,
+                is_pinned: false,
                 delivery: DeliveryStatus::Pending,
                 attachments: vec![AttachmentInfo {
                     kind: AttachmentKind::Doc,
@@ -538,6 +539,7 @@ fn handle_send_command(app: &mut App, peer_id: i64, cmd: SendCommand) -> Option<
                 is_outgoing: true,
                 is_read: false,
                 is_edited: false,
+                is_pinned: false,
                 delivery: DeliveryStatus::Pending,
                 attachments: vec![AttachmentInfo {
                     kind: AttachmentKind::Photo,
@@ -572,6 +574,7 @@ fn handle_send_command(app: &mut App, peer_id: i64, cmd: SendCommand) -> Option<
                     is_outgoing: true,
                     is_read: false,
                     is_edited: false,
+                    is_pinned: false,
                     delivery: DeliveryStatus::Pending,
                     attachments: vec![AttachmentInfo {
                         kind: AttachmentKind::Photo,
@@ -617,6 +620,7 @@ fn handle_vk_event(app: &mut App, event: VkEvent) -> Option<Message> {
                     is_outgoing: from_id == app.auth.user_id().unwrap_or(0),
                     is_read: true,
                     is_edited: false,
+                    is_pinned: false,
                     delivery: DeliveryStatus::Sent,
                     attachments: Vec::new(),
                     reply: None,

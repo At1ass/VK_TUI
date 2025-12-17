@@ -73,6 +73,15 @@ pub fn handle_command(app: &mut App, cmd: &str) -> Option<crate::message::Messag
         "h" | "help" => {
             app.show_help = true;
         }
+        "r" | "reply" => {
+            app.status = Some("Reply not yet implemented".into());
+        }
+        "f" | "forward" | "fwd" => {
+            app.status = Some("Forward not yet implemented".into());
+        }
+        "p" | "pin" => {
+            app.status = Some("Pin/unpin not yet implemented".into());
+        }
         _ => {
             app.status = Some(format!("Unknown command: {}", parts[0]));
         }

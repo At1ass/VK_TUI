@@ -116,6 +116,7 @@ pub struct ChatMessage {
     pub is_outgoing: bool,
     pub is_read: bool,
     pub is_edited: bool,
+    pub is_pinned: bool,
     pub delivery: DeliveryStatus,
     pub attachments: Vec<AttachmentInfo>,
     pub reply: Option<ReplyPreview>,
