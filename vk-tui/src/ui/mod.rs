@@ -227,108 +227,146 @@ fn render_chat_area(app: &App, frame: &mut Frame, area: Rect) {
 fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
     let is_focused = app.focus == Focus::Messages;
 
+    let render_lines = |msg: &crate::state::ChatMessage| -> Vec<Line<'static>> {
+        let name_style = if msg.is_outgoing {
+            Style::default().fg(Color::Green)
+        } else {
+            Style::default().fg(Color::Cyan)
+        };
+
+        let read_indicator = match msg.delivery {
+            DeliveryStatus::Pending => "...",
+            DeliveryStatus::Failed => "!",
+            DeliveryStatus::Sent => {
+                if msg.is_outgoing {
+                    if msg.is_read { "✓✓" } else { "✓" }
+                } else {
+                    ""
+                }
+            }
+        };
+
+        // Format timestamp
+        let time = format_timestamp(msg.timestamp);
+
+        let mut first_line = vec![
+            Span::styled(time, Style::default().fg(Color::DarkGray)),
+            Span::raw(" "),
+            if msg.is_pinned {
+                Span::styled("📌 ", Style::default().fg(Color::Yellow))
+            } else {
+                Span::raw("")
+            },
+            Span::styled(msg.from_name.clone(), name_style),
+            Span::raw(": "),
+            Span::raw(msg.text.clone()),
+        ];
+
+        // Add edited indicator
+        if msg.is_edited {
+            first_line.push(Span::styled(" (e)", Style::default().fg(Color::Yellow)));
+        }
+
+        // Add delivery status indicator
+        if !read_indicator.is_empty() {
+            first_line.push(Span::styled(
+                format!(" {}", read_indicator),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+
+        let mut lines = vec![Line::from(first_line)];
+
+        if let Some(reply) = &msg.reply {
+            lines.push(Line::from(vec![
+                Span::styled("↩ ", Style::default().fg(Color::Gray)),
+                Span::styled(reply.from.clone(), Style::default().fg(Color::Gray)),
+                Span::raw(": "),
+                Span::styled(
+                    truncate_str(&reply.text, 60),
+                    Style::default().fg(Color::Gray),
+                ),
+            ]));
+        }
+
+        if msg.fwd_count > 0 {
+            lines.push(Line::from(vec![Span::styled(
+                format!("↪ forwarded {}", msg.fwd_count),
+                Style::default().fg(Color::Gray),
+            )]));
+        }
+
+        for att in &msg.attachments {
+            let label = match &att.kind {
+                AttachmentKind::Photo => "[photo]".to_string(),
+                AttachmentKind::Doc => "[file]".to_string(),
+                AttachmentKind::Link => "[link]".to_string(),
+                AttachmentKind::Audio => "[audio]".to_string(),
+                AttachmentKind::Sticker => "[sticker]".to_string(),
+                AttachmentKind::Other(k) => format!("[{}]", k),
+            };
+            let mut detail = format!("{} {}", label, att.title);
+            if let Some(sub) = &att.subtitle {
+                detail.push_str(&format!(" — {}", sub));
+            }
+            if let Some(size) = att.size {
+                let kb = size as f64 / 1024.0;
+                detail.push_str(&format!(" ({:.1} KB)", kb));
+            }
+            if let Some(url) = &att.url {
+                detail.push(' ');
+                detail.push_str(url);
+            }
+            lines.push(Line::from(Span::styled(
+                detail,
+                Style::default().fg(Color::Gray),
+            )));
+        }
+
+        lines
+    };
+
+    // Reserve top area for pinned message if available
+    let pinned_message = app.messages.iter().find(|m| m.is_pinned);
+    let (pinned_area, list_area) = if pinned_message.is_some() {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(1)])
+            .split(area);
+        (Some(layout[0]), layout[1])
+    } else {
+        (None, area)
+    };
+
+    if let (Some(msg), Some(p_area)) = (pinned_message, pinned_area) {
+        let height = render_lines(msg).len() as u16 + 2;
+        let adj_height = height.min(p_area.height);
+        let pin_block = Block::default()
+            .title(" Pinned ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow));
+        let inner_height = adj_height.saturating_sub(2).max(1);
+        let inner_area = Rect::new(p_area.x, p_area.y, p_area.width, adj_height);
+        frame.render_widget(pin_block, inner_area);
+        let content = Paragraph::new(render_lines(msg))
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: false });
+        frame.render_widget(
+            content,
+            Rect::new(
+                inner_area.x + 1,
+                inner_area.y + 1,
+                inner_area.width.saturating_sub(2),
+                inner_height,
+            ),
+        );
+    }
+
     let messages: Vec<ListItem> = app
         .messages
         .iter()
         .enumerate()
-        .map(|(_idx, msg)| {
-            let name_style = if msg.is_outgoing {
-                Style::default().fg(Color::Green)
-            } else {
-                Style::default().fg(Color::Cyan)
-            };
-
-            let read_indicator = match msg.delivery {
-                DeliveryStatus::Pending => "...",
-                DeliveryStatus::Failed => "!",
-                DeliveryStatus::Sent => {
-                    if msg.is_outgoing {
-                        if msg.is_read { "✓✓" } else { "✓" }
-                    } else {
-                        ""
-                    }
-                }
-            };
-
-            // Format timestamp
-            let time = format_timestamp(msg.timestamp);
-
-            let mut first_line = vec![
-                Span::styled(time, Style::default().fg(Color::DarkGray)),
-                Span::raw(" "),
-                if msg.is_pinned {
-                    Span::styled("📌 ", Style::default().fg(Color::Yellow))
-                } else {
-                    Span::raw("")
-                },
-                Span::styled(&msg.from_name, name_style),
-                Span::raw(": "),
-                Span::raw(&msg.text),
-            ];
-
-            // Add edited indicator
-            if msg.is_edited {
-                first_line.push(Span::styled(" (e)", Style::default().fg(Color::Yellow)));
-            }
-
-            // Add delivery status indicator
-            if !read_indicator.is_empty() {
-                first_line.push(Span::styled(
-                    format!(" {}", read_indicator),
-                    Style::default().fg(Color::DarkGray),
-                ));
-            }
-
-            let mut lines = vec![Line::from(first_line)];
-
-            if let Some(reply) = &msg.reply {
-                lines.push(Line::from(vec![
-                    Span::styled("↩ ", Style::default().fg(Color::Gray)),
-                    Span::styled(&reply.from, Style::default().fg(Color::Gray)),
-                    Span::raw(": "),
-                    Span::styled(
-                        truncate_str(&reply.text, 60),
-                        Style::default().fg(Color::Gray),
-                    ),
-                ]));
-            }
-
-            if msg.fwd_count > 0 {
-                lines.push(Line::from(vec![Span::styled(
-                    format!("↪ forwarded {}", msg.fwd_count),
-                    Style::default().fg(Color::Gray),
-                )]));
-            }
-
-            for att in &msg.attachments {
-                let label = match &att.kind {
-                    AttachmentKind::Photo => "[photo]".to_string(),
-                    AttachmentKind::Doc => "[file]".to_string(),
-                    AttachmentKind::Link => "[link]".to_string(),
-                    AttachmentKind::Audio => "[audio]".to_string(),
-                    AttachmentKind::Sticker => "[sticker]".to_string(),
-                    AttachmentKind::Other(k) => format!("[{}]", k),
-                };
-                let mut detail = format!("{} {}", label, att.title);
-                if let Some(sub) = &att.subtitle {
-                    detail.push_str(&format!(" — {}", sub));
-                }
-                if let Some(size) = att.size {
-                    let kb = size as f64 / 1024.0;
-                    detail.push_str(&format!(" ({:.1} KB)", kb));
-                }
-                if let Some(url) = &att.url {
-                    detail.push(' ');
-                    detail.push_str(url);
-                }
-                lines.push(Line::from(Span::styled(
-                    detail,
-                    Style::default().fg(Color::Gray),
-                )));
-            }
-
-            ListItem::new(lines)
-        })
+        .map(|(_idx, msg)| ListItem::new(render_lines(msg)))
         .collect();
 
     let border_style = if is_focused {
@@ -360,7 +398,7 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
     let mut state = ListState::default();
     state.select(Some(app.messages_scroll));
 
-    frame.render_stateful_widget(list, area, &mut state);
+    frame.render_stateful_widget(list, list_area, &mut state);
 }
 
 /// Render input field
