@@ -95,18 +95,18 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 } else {
                     app.status = Some("Failed to parse token from URL".into());
                 }
-            } else if app.screen == Screen::Main && app.focus == Focus::ChatList {
-                if let Some((peer_id, title)) =
+            } else if app.screen == Screen::Main
+                && app.focus == Focus::ChatList
+                && let Some((peer_id, title)) =
                     app.current_chat().map(|chat| (chat.id, chat.title.clone()))
-                {
-                    app.current_peer_id = Some(peer_id);
-                    app.messages.clear();
-                    app.is_loading = true;
-                    app.send_action(AsyncAction::LoadMessages(peer_id));
-                    app.send_action(AsyncAction::MarkAsRead(peer_id));
-                    app.status = Some(format!("Loading chat: {}", title));
-                    app.focus = Focus::Messages;
-                }
+            {
+                app.current_peer_id = Some(peer_id);
+                app.messages.clear();
+                app.is_loading = true;
+                app.send_action(AsyncAction::LoadMessages(peer_id));
+                app.send_action(AsyncAction::MarkAsRead(peer_id));
+                app.status = Some(format!("Loading chat: {}", title));
+                app.focus = Focus::Messages;
             }
         }
         Message::Back => {
@@ -116,17 +116,18 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
         }
         Message::OpenLink => {
-            if app.screen == Screen::Main && app.focus == Focus::Messages {
-                if let Some(msg) = app.current_message() {
-                    if let Some(url) = first_url(msg) {
-                        if let Err(e) = open::that(&url) {
-                            app.status = Some(format!("Failed to open link: {}", e));
-                        } else {
-                            app.status = Some(format!("Opened {}", url));
-                        }
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                if let Some(url) = first_url(msg) {
+                    if let Err(e) = open::that(&url) {
+                        app.status = Some(format!("Failed to open link: {}", e));
                     } else {
-                        app.status = Some("No link in message".into());
+                        app.status = Some(format!("Opened {}", url));
                     }
+                } else {
+                    app.status = Some("No link in message".into());
                 }
             }
         }
@@ -277,20 +278,21 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
 
         // Downloads
         Message::DownloadAttachment => {
-            if app.screen == Screen::Main && app.focus == Focus::Messages {
-                if let Some(msg) = app.current_message() {
-                    let downloadable: Vec<AttachmentInfo> = msg
-                        .attachments
-                        .iter()
-                        .filter(|a| a.url.is_some())
-                        .cloned()
-                        .collect();
-                    if downloadable.is_empty() {
-                        app.status = Some("No downloadable attachments".into());
-                    } else {
-                        app.send_action(AsyncAction::DownloadAttachments(downloadable));
-                        app.status = Some("Downloading attachments...".into());
-                    }
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                let downloadable: Vec<AttachmentInfo> = msg
+                    .attachments
+                    .iter()
+                    .filter(|a| a.url.is_some())
+                    .cloned()
+                    .collect();
+                if downloadable.is_empty() {
+                    app.status = Some("No downloadable attachments".into());
+                } else {
+                    app.send_action(AsyncAction::DownloadAttachments(downloadable));
+                    app.status = Some("Downloading attachments...".into());
                 }
             }
         }
@@ -307,53 +309,56 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
         }
         Message::DeleteMessage => {
-            if app.screen == Screen::Main && app.focus == Focus::Messages {
-                if let Some(msg) = app.current_message().cloned() {
-                    if !msg.is_outgoing {
-                        app.status = Some("Can only delete your own messages".into());
-                        return None;
-                    }
-                    if msg.id == 0 {
-                        app.status = Some("Cannot delete message that is not sent yet".into());
-                        return None;
-                    }
-                    if let Some(peer_id) = app.current_peer_id {
-                        app.status = Some("Deleting message...".into());
-                        app.send_action(AsyncAction::DeleteMessage(peer_id, msg.id, false));
-                    }
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message().cloned()
+            {
+                if !msg.is_outgoing {
+                    app.status = Some("Can only delete your own messages".into());
+                    return None;
+                }
+                if msg.id == 0 {
+                    app.status = Some("Cannot delete message that is not sent yet".into());
+                    return None;
+                }
+                if let Some(peer_id) = app.current_peer_id {
+                    app.status = Some("Deleting message...".into());
+                    app.send_action(AsyncAction::DeleteMessage(peer_id, msg.id, false));
                 }
             }
         }
         Message::EditMessage => {
-            if app.screen == Screen::Main && app.focus == Focus::Messages {
-                if let Some(msg) = app.current_message() {
-                    if !msg.is_outgoing {
-                        app.status = Some("Can only edit your own messages".into());
-                        return None;
-                    }
-                    app.input = msg.text.clone();
-                    app.input_cursor = app.input.chars().count();
-                    app.editing_message = Some(app.messages_scroll);
-                    app.mode = Mode::Insert;
-                    app.focus = Focus::Input;
-                    app.status = Some("Editing message (not yet saved)".into());
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                if !msg.is_outgoing {
+                    app.status = Some("Can only edit your own messages".into());
+                    return None;
                 }
+                app.input = msg.text.clone();
+                app.input_cursor = app.input.chars().count();
+                app.editing_message = Some(app.messages_scroll);
+                app.mode = Mode::Insert;
+                app.focus = Focus::Input;
+                app.status = Some("Editing message (not yet saved)".into());
             }
         }
         Message::YankMessage => {
-            if app.screen == Screen::Main && app.focus == Focus::Messages {
-                if let Some(msg) = app.current_message() {
-                    app.status = Some(format!("Copied: {}", truncate_str(&msg.text, 50)));
-                }
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                app.status = Some(format!("Copied: {}", truncate_str(&msg.text, 50)));
             }
         }
         Message::PinMessage => {
-            if app.screen == Screen::Main && app.focus == Focus::Messages {
-                if let Some(msg) = app.current_message() {
-                    if let Some(peer_id) = app.current_peer_id {
-                        app.status = Some(format!("Pin message {} in {}", msg.id, peer_id));
-                    }
-                }
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+                && let Some(peer_id) = app.current_peer_id
+            {
+                app.status = Some(format!("Pin message {} in {}", msg.id, peer_id));
             }
         }
 
@@ -668,14 +673,14 @@ fn handle_vk_event(app: &mut App, event: VkEvent) -> Option<Message> {
             peer_id,
             message_id,
         } => {
-            if app.current_peer_id == Some(peer_id) {
-                if let Some(pos) = app.messages.iter().position(|m| m.id == message_id) {
-                    app.messages.remove(pos);
-                    if app.messages_scroll >= app.messages.len() && app.messages_scroll > 0 {
-                        app.messages_scroll -= 1;
-                    }
-                    app.status = Some("Message deleted from web".into());
+            if app.current_peer_id == Some(peer_id)
+                && let Some(pos) = app.messages.iter().position(|m| m.id == message_id)
+            {
+                app.messages.remove(pos);
+                if app.messages_scroll >= app.messages.len() && app.messages_scroll > 0 {
+                    app.messages_scroll -= 1;
                 }
+                app.status = Some("Message deleted from web".into());
             }
         }
         VkEvent::UserTyping { peer_id, user_id } => {

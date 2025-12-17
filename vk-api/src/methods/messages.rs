@@ -768,32 +768,28 @@ fn extract_doc_attachment(value: &Value) -> Result<String> {
         return extract_doc_attachment(obj);
     }
 
-    if let Some(arr) = value.as_array() {
-        if let Some(first) = arr.first() {
-            if let Some(doc_obj) = first
-                .get("doc")
-                .or_else(|| first.as_object().map(|_| first))
-            {
-                if let (Some(owner_id), Some(id)) = (
-                    doc_obj.get("owner_id").and_then(|v| v.as_i64()),
-                    doc_obj.get("id").and_then(|v| v.as_i64()),
-                ) {
-                    return Ok(format!("doc{}_{}", owner_id, id));
-                }
-            }
-        }
+    if let Some(arr) = value.as_array()
+        && let Some(first) = arr.first()
+        && let Some(doc_obj) = first
+            .get("doc")
+            .or_else(|| first.as_object().map(|_| first))
+        && let (Some(owner_id), Some(id)) = (
+            doc_obj.get("owner_id").and_then(|v| v.as_i64()),
+            doc_obj.get("id").and_then(|v| v.as_i64()),
+        )
+    {
+        return Ok(format!("doc{}_{}", owner_id, id));
     }
 
     if let Some(doc_obj) = value
         .get("doc")
         .or_else(|| value.as_object().map(|_| value))
-    {
-        if let (Some(owner_id), Some(id)) = (
+        && let (Some(owner_id), Some(id)) = (
             doc_obj.get("owner_id").and_then(|v| v.as_i64()),
             doc_obj.get("id").and_then(|v| v.as_i64()),
-        ) {
-            return Ok(format!("doc{}_{}", owner_id, id));
-        }
+        )
+    {
+        return Ok(format!("doc{}_{}", owner_id, id));
     }
 
     Err(anyhow::anyhow!(

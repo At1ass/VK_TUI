@@ -365,8 +365,7 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
     let messages: Vec<ListItem> = app
         .messages
         .iter()
-        .enumerate()
-        .map(|(_idx, msg)| ListItem::new(render_lines(msg)))
+        .map(|msg| ListItem::new(render_lines(msg)))
         .collect();
 
     let border_style = if is_focused {

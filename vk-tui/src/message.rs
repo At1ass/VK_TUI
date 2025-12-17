@@ -131,17 +131,18 @@ impl Message {
         }
 
         // Global shortcuts (work in all modes)
-        match key.code {
-            KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Message::Quit;
-            }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Message::Quit;
+        if let Some(global) = match key.code {
+            KeyCode::Char('q') | KeyCode::Char('c')
+                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                Some(Message::Quit)
             }
             KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Message::OpenAuthUrl;
+                Some(Message::OpenAuthUrl)
             }
-            _ => {}
+            _ => None,
+        } {
+            return global;
         }
 
         // Route to mode-specific handler
@@ -154,16 +155,21 @@ impl Message {
 
     /// Handle keys on the Auth screen (always acts like insert mode)
     pub fn from_auth_key_event(key: KeyEvent) -> Self {
-        match key.code {
-            KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Message::Quit;
-            }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Message::Quit;
+        if let Some(global) = match key.code {
+            KeyCode::Char('q') | KeyCode::Char('c')
+                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                Some(Message::Quit)
             }
             KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Message::OpenAuthUrl;
+                Some(Message::OpenAuthUrl)
             }
+            _ => None,
+        } {
+            return global;
+        }
+
+        match key.code {
             KeyCode::Enter => Message::InputSubmit,
             KeyCode::Backspace => Message::InputBackspace,
             KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {

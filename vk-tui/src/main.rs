@@ -192,7 +192,7 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                                 server.ts = ts;
                             }
                         }
-                        2 | 3 | 4 => {
+                        2..=4 => {
                             // Need to get new server
                             match client.longpoll().get_server().await {
                                 Ok(new_server) => server = new_server,
