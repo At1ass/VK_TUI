@@ -311,6 +311,9 @@ impl<'a> MessagesApi<'a> {
             }
         };
         params.insert("message", message.to_string());
+        // Preserve forwards/snippets to mirror web behavior
+        params.insert("keep_forward_messages", "1".into());
+        params.insert("keep_snippets", "1".into());
 
         let _: i32 = self.client.request("messages.edit", params).await?;
         Ok(())
