@@ -450,15 +450,40 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                         }
                     }
                     ForwardStage::EnterComment { peer_id, .. } => {
-                        let comment = if let Some(state) = app.forward.take() {
-                            state.comment
+                        let (comment, source_id) = if let Some(state) = app.forward.take() {
+                            (state.comment, state.source_message_id)
                         } else {
-                            String::new()
+                            (String::new(), fwd.source_message_id)
                         };
+
+                        // Optimistic placeholder
+                        let text = if comment.is_empty() {
+                            "[forwarded]".to_string()
+                        } else {
+                            comment.clone()
+                        };
+                        app.messages.push(ChatMessage {
+                            id: 0,
+                            cmid: None,
+                            from_id: app.auth.user_id().unwrap_or(0),
+                            from_name: "You".into(),
+                            text,
+                            timestamp: chrono_timestamp(),
+                            is_outgoing: true,
+                            is_read: false,
+                            is_edited: false,
+                            is_pinned: false,
+                            delivery: DeliveryStatus::Pending,
+                            attachments: Vec::new(),
+                            reply: None,
+                            fwd_count: 1,
+                        });
+                        app.messages_scroll = app.messages.len().saturating_sub(1);
+
                         app.status = Some("Forwarding...".into());
                         app.send_action(AsyncAction::SendForward(
                             peer_id,
-                            vec![fwd.source_message_id],
+                            vec![source_id],
                             comment,
                         ));
                     }
