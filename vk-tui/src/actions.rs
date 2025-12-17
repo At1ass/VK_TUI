@@ -117,6 +117,30 @@ pub async fn send_forward(
     }
 }
 
+pub async fn send_reply(
+    client: Arc<VkClient>,
+    peer_id: i64,
+    reply_to: i64,
+    text: String,
+    tx: mpsc::UnboundedSender<Message>,
+) {
+    match client
+        .messages()
+        .send_with_reply(peer_id, &text, reply_to)
+        .await
+    {
+        Ok(sent) => {
+            let _ = tx.send(Message::MessageSent(
+                sent.message_id,
+                sent.conversation_message_id,
+            ));
+        }
+        Err(e) => {
+            let _ = tx.send(Message::SendFailed(format!("Failed to send reply: {}", e)));
+        }
+    }
+}
+
 pub async fn send_photo_attachment(
     client: Arc<VkClient>,
     peer_id: i64,

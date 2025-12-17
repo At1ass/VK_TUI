@@ -140,6 +140,7 @@ pub enum AsyncAction {
     LoadMessages(i64),                  // peer_id
     SendMessage(i64, String),           // peer_id, text
     SendForward(i64, Vec<i64>, String), // peer_id, message_ids, comment
+    SendReply(i64, i64, String),        // peer_id, reply_to_msg_id, text
     StartLongPoll,
     MarkAsRead(i64),
     SendPhoto(i64, String), // peer_id, path
@@ -178,6 +179,7 @@ pub struct App {
     pub current_peer_id: Option<i64>,
     pub messages: Vec<ChatMessage>,
     pub messages_scroll: usize,
+    pub reply_to: Option<(i64, ReplyPreview)>,
 
     // Input state
     pub input: String,
@@ -216,6 +218,7 @@ impl Default for App {
             current_peer_id: None,
             messages: Vec::new(),
             messages_scroll: 0,
+            reply_to: None,
             input: String::new(),
             input_cursor: 0,
             command_input: String::new(),

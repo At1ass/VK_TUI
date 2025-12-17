@@ -7,7 +7,7 @@ use crate::input::{delete_word, insert_char_at, remove_char_at};
 use crate::message::Message;
 use crate::state::{
     App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, DeliveryStatus, Focus,
-    ForwardStage, Mode, RunningState, Screen,
+    ForwardStage, Mode, ReplyPreview, RunningState, Screen,
 };
 use vk_api::VkClient;
 
@@ -224,7 +224,30 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 app.input_cursor = 0;
                 app.mode = Mode::Normal;
                 app.status = Some("Sending...".into());
-                app.send_action(AsyncAction::SendMessage(peer_id, text));
+
+                if let Some((reply_id, preview)) = app.reply_to.take() {
+                    app.messages.push(ChatMessage {
+                        id: 0,
+                        cmid: None,
+                        from_id: app.auth.user_id().unwrap_or(0),
+                        from_name: "You".into(),
+                        text: text.clone(),
+                        timestamp: chrono_timestamp(),
+                        is_outgoing: true,
+                        is_read: false,
+                        is_edited: false,
+                        is_pinned: false,
+                        delivery: DeliveryStatus::Pending,
+                        attachments: Vec::new(),
+                        reply: Some(preview),
+                        fwd_count: 0,
+                        forwards: Vec::new(),
+                    });
+                    app.messages_scroll = app.messages.len().saturating_sub(1);
+                    app.send_action(AsyncAction::SendReply(peer_id, reply_id, text));
+                } else {
+                    app.send_action(AsyncAction::SendMessage(peer_id, text));
+                }
             }
             _ => {}
         },
@@ -300,7 +323,21 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         // Message actions
         Message::ReplyToMessage => {
             if app.screen == Screen::Main && app.focus == Focus::Messages {
-                app.status = Some("Reply is not implemented yet".into());
+                if let Some(msg) = app.current_message().cloned() {
+                    if msg.id == 0 {
+                        app.status = Some("Cannot reply to unsent message".into());
+                    } else {
+                        let preview = ReplyPreview {
+                            from: msg.from_name.clone(),
+                            text: truncate_str(&msg.text, 120),
+                            attachments: msg.attachments.clone(),
+                        };
+                        app.reply_to = Some((msg.id, preview));
+                        app.mode = Mode::Insert;
+                        app.focus = Focus::Input;
+                        app.status = Some(format!("Replying to {} (Esc to cancel)", msg.from_name));
+                    }
+                }
             }
         }
         Message::DeleteMessage => {
@@ -355,6 +392,10 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             {
                 app.status = Some(format!("Pin message {} in {}", msg.id, peer_id));
             }
+        }
+        Message::CancelReply => {
+            app.reply_to = None;
+            app.status = Some("Reply cancelled".into());
         }
         Message::ViewForwarded => {
             if app.screen == Screen::Main

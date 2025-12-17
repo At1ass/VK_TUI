@@ -90,6 +90,9 @@ fn spawn_action_handler(
                 AsyncAction::SendMessage(peer_id, text) => {
                     tokio::spawn(actions::send_message(client, peer_id, text, tx));
                 }
+                AsyncAction::SendReply(peer_id, reply_to, text) => {
+                    tokio::spawn(actions::send_reply(client, peer_id, reply_to, text, tx));
+                }
                 AsyncAction::SendForward(peer_id, ids, comment) => {
                     tokio::spawn(actions::send_forward(client, peer_id, ids, comment, tx));
                 }

@@ -99,6 +99,8 @@ pub enum Message {
     ForwardViewClose,
     ForwardViewUp,
     ForwardViewDown,
+    /// Cancel reply context
+    CancelReply,
 
     // Search
     /// Start search mode
