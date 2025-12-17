@@ -169,7 +169,9 @@ pub enum AsyncAction {
     SendPhoto(i64, String), // peer_id, path
     SendDoc(i64, String),   // peer_id, path
     DownloadAttachments(Vec<AttachmentInfo>),
-    EditMessage(i64, i64, String), // peer_id, cmid, text
+    EditMessage(i64, i64, String),  // peer_id, cmid, text
+    DeleteMessage(i64, i64, bool),  // peer_id, message_id, delete_for_all
+    FetchMessageById(i64),          // message_id - to get cmid after sending
 }
 
 /// Delivery state for messages
@@ -552,27 +554,43 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     {
                         // Editing existing message
                         if let Some(edit_idx) = app.editing_message {
-                            if let Some(msg) = app.messages.get(edit_idx) {
-                                if let Some(cmid) = msg.cmid {
-                                    let text = std::mem::take(&mut app.input);
-                                    app.input_cursor = 0;
-                                    app.mode = Mode::Normal;
-                                    app.editing_message = None;
-                                    app.status = Some("Editing...".into());
-
-                                    if let Some(m) = app.messages.get_mut(edit_idx) {
-                                        m.text = text.clone();
-                                    }
-
-                                    app.send_action(AsyncAction::EditMessage(peer_id, cmid, text));
-                                    return None;
-                                } else {
+                            let cmid = if let Some(msg) = app.messages.get(edit_idx) {
+                                if msg.id == 0 {
                                     app.status =
-                                        Some("Cannot edit: missing conversation id".into());
+                                        Some("Cannot edit message that is not sent yet".into());
                                     app.editing_message = None;
                                     return None;
                                 }
+                                match msg.cmid {
+                                    Some(cmid) => cmid,
+                                    None => {
+                                        app.status =
+                                            Some("Cannot edit: missing conversation message id".into());
+                                        app.editing_message = None;
+                                        return None;
+                                    }
+                                }
+                            } else {
+                                app.editing_message = None;
+                                return None;
+                            };
+
+                            let text = std::mem::take(&mut app.input);
+                            app.input_cursor = 0;
+                            app.mode = Mode::Normal;
+                            app.editing_message = None;
+                            app.status = Some("Editing...".into());
+
+                            if let Some(m) = app.messages.get_mut(edit_idx) {
+                                m.text = text.clone();
                             }
+
+                            app.status = Some(format!("Editing message {} in {}: {}", cmid, peer_id, text));
+
+                            app.send_action(AsyncAction::EditMessage(
+                                peer_id, cmid, text,
+                            ));
+                            return None;
                         }
 
                         if let Some(cmd) = parse_send_command(&app.input) {
@@ -774,6 +792,43 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                         }
                     }
                 }
+                VkEvent::MessageEditedFromLongPoll {
+                    peer_id,
+                    message_id,
+                    text,
+                } => {
+                    // Update message text in current chat
+                    if app.current_peer_id == Some(peer_id) {
+                        if let Some(msg) = app.messages.iter_mut().find(|m| m.id == message_id) {
+                            msg.text = text.clone();
+                            app.status = Some("Message updated from web".into());
+                        }
+                    }
+                    // Update last message in chat list if it was the last one
+                    if let Some(chat) = app.chats.iter_mut().find(|c| c.id == peer_id) {
+                        // We don't have enough info to know if this was the last message,
+                        // but we can update if text matches
+                        if chat.last_message.contains(&text) || text.contains(&chat.last_message) {
+                            chat.last_message = text;
+                        }
+                    }
+                }
+                VkEvent::MessageDeletedFromLongPoll {
+                    peer_id,
+                    message_id,
+                } => {
+                    // Remove message from current chat
+                    if app.current_peer_id == Some(peer_id) {
+                        if let Some(pos) = app.messages.iter().position(|m| m.id == message_id) {
+                            app.messages.remove(pos);
+                            // Adjust scroll position if needed
+                            if app.messages_scroll >= app.messages.len() && app.messages_scroll > 0 {
+                                app.messages_scroll -= 1;
+                            }
+                            app.status = Some("Message deleted from web".into());
+                        }
+                    }
+                }
                 VkEvent::UserTyping { peer_id, user_id } => {
                     if app.current_peer_id == Some(peer_id) {
                         let name = app.get_user_name(user_id);
@@ -818,12 +873,13 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
         }
 
-        Message::MessageSent(msg_id) => {
-            // Update the last message ID
+        Message::MessageSent(msg_id, cmid) => {
+            // Update the last message ID and cmid
             if let Some(msg) = app.messages.last_mut()
                 && msg.id == 0
             {
                 msg.id = msg_id;
+                msg.cmid = Some(cmid);
                 msg.delivery = DeliveryStatus::Sent;
             }
         }
@@ -833,6 +889,25 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             app.editing_message = None;
             if let Some(msg) = app.messages.iter_mut().find(|m| m.cmid == Some(cmid)) {
                 msg.delivery = DeliveryStatus::Sent;
+            }
+        }
+
+        Message::MessageDeleted(msg_id) => {
+            app.status = Some("Message deleted".into());
+            // Remove the message from the list
+            if let Some(pos) = app.messages.iter().position(|m| m.id == msg_id) {
+                app.messages.remove(pos);
+                // Adjust scroll position if needed
+                if app.messages_scroll >= app.messages.len() && app.messages_scroll > 0 {
+                    app.messages_scroll -= 1;
+                }
+            }
+        }
+
+        Message::MessageDetailsFetched(msg_id, cmid) => {
+            // Update cmid for the message
+            if let Some(msg) = app.messages.iter_mut().find(|m| m.id == msg_id) {
+                msg.cmid = cmid;
             }
         }
 
@@ -979,9 +1054,13 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             {
                 if msg.is_outgoing {
                     let msg_id = msg.id;
+                    if msg_id == 0 {
+                        app.status = Some("Cannot delete message that is not sent yet".into());
+                        return None;
+                    }
                     if let Some(peer_id) = app.current_peer_id {
-                        // TODO: Add AsyncAction::DeleteMessage
-                        app.status = Some(format!("Delete message {} in {}", msg_id, peer_id));
+                        app.status = Some("Deleting message...".into());
+                        app.send_action(AsyncAction::DeleteMessage(peer_id, msg_id, false));
                     }
                 } else {
                     app.status = Some("Can only delete your own messages".into());
@@ -998,6 +1077,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     // Pre-fill input with message text and switch to Insert mode
                     app.input = msg.text.clone();
                     app.input_cursor = app.input.chars().count();
+                    app.editing_message = Some(app.messages_scroll);
                     app.mode = Mode::Insert;
                     app.focus = Focus::Input;
                     app.status = Some("Editing message (not yet saved)".into());

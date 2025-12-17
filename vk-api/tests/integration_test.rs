@@ -136,9 +136,12 @@ async fn test_send_and_get_saved_messages() {
     let send_result = client.messages().send(peer_id, &test_message).await;
 
     match send_result {
-        Ok(message_id) => {
-            println!("✓ Message sent successfully! Message ID: {}", message_id);
-            assert!(message_id > 0, "Message ID should be positive");
+        Ok(sent) => {
+            println!(
+                "✓ Message sent successfully! Message ID: {}, CMID: {}",
+                sent.message_id, sent.conversation_message_id
+            );
+            assert!(sent.message_id > 0, "Message ID should be positive");
 
             // Wait a bit for message to appear
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -154,7 +157,7 @@ async fn test_send_and_get_saved_messages() {
             println!("✓ Got {} messages from history", history.items.len());
 
             // Find our message
-            let found = history.items.iter().find(|msg| msg.id == message_id);
+            let found = history.items.iter().find(|msg| msg.id == sent.message_id);
 
             if let Some(msg) = found {
                 println!("✓ Found our message: {:?}", msg.text);
@@ -315,20 +318,26 @@ async fn test_edit_message() {
 
     // Send a message first
     let original_text = format!("Original text - {}", chrono::Utc::now().format("%H:%M:%S"));
-    let msg_id = client
+    let sent = client
         .messages()
         .send(user_id, &original_text)
         .await
         .expect("Failed to send message");
 
-    println!("✓ Sent message {} with text: {}", msg_id, original_text);
+    println!(
+        "✓ Sent message {} (cmid: {}) with text: {}",
+        sent.message_id, sent.conversation_message_id, original_text
+    );
 
-    // Wait a bit
+    // Wait a bit for API to process
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-    // Edit the message
+    // Edit the message using the cmid we got from send
     let new_text = format!("EDITED - {}", chrono::Utc::now().format("%H:%M:%S"));
-    let edit_result = client.messages().edit(user_id, msg_id, &new_text).await;
+    let edit_result = client
+        .messages()
+        .edit(user_id, sent.conversation_message_id, &new_text)
+        .await;
 
     match edit_result {
         Ok(_) => {
@@ -343,7 +352,7 @@ async fn test_edit_message() {
                 .await
                 .expect("Failed to get history");
 
-            if let Some(msg) = history.items.iter().find(|m| m.id == msg_id) {
+            if let Some(msg) = history.items.iter().find(|m| m.id == sent.message_id) {
                 println!("✓ Verified edited message: {}", msg.text);
                 // Note: VK API might take time to update, so we won't assert here
             }
@@ -370,19 +379,19 @@ async fn test_delete_message() {
         "Message to delete - {}",
         chrono::Utc::now().format("%H:%M:%S")
     );
-    let msg_id = client
+    let sent = client
         .messages()
         .send(user_id, &text)
         .await
         .expect("Failed to send message");
 
-    println!("✓ Sent message {} to delete", msg_id);
+    println!("✓ Sent message {} to delete", sent.message_id);
 
     // Wait a bit
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     // Delete the message
-    let delete_result = client.messages().delete(&[msg_id], false).await;
+    let delete_result = client.messages().delete(&[sent.message_id], false).await;
 
     match delete_result {
         Ok(_) => {

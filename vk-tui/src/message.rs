@@ -102,10 +102,14 @@ pub enum Message {
     ConversationsLoaded(Vec<Chat>, Vec<User>),
     /// Messages loaded from API
     MessagesLoaded(Vec<ChatMessage>, Vec<User>),
-    /// Message sent successfully
-    MessageSent(i64),
+    /// Message sent successfully (message_id, cmid)
+    MessageSent(i64, i64),
     /// Message edited successfully
     MessageEdited(i64),
+    /// Message deleted successfully
+    MessageDeleted(i64), // message_id
+    /// Message details fetched (update cmid)
+    MessageDetailsFetched(i64, Option<i64>), // message_id, cmid
     /// Error occurred
     Error(String),
 }

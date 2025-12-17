@@ -6,6 +6,13 @@ use super::group::Group;
 use super::misc::CanWrite;
 use super::user::User;
 
+/// Result of sending a message
+#[derive(Debug, Clone)]
+pub struct SentMessage {
+    pub message_id: i64,
+    pub conversation_message_id: i64,
+}
+
 /// Message
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {

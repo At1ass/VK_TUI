@@ -103,6 +103,12 @@ fn spawn_action_handler(
                 AsyncAction::EditMessage(peer_id, cmid, text) => {
                     tokio::spawn(edit_message(client, peer_id, cmid, text, tx));
                 }
+                AsyncAction::DeleteMessage(_peer_id, msg_id, delete_for_all) => {
+                    tokio::spawn(delete_message(client, msg_id, delete_for_all, tx));
+                }
+                AsyncAction::FetchMessageById(msg_id) => {
+                    tokio::spawn(fetch_message_by_id(client, msg_id, tx));
+                }
             }
         }
     });
@@ -291,8 +297,11 @@ async fn send_message(
     tx: mpsc::UnboundedSender<Message>,
 ) {
     match client.messages().send(peer_id, &text).await {
-        Ok(msg_id) => {
-            let _ = tx.send(Message::MessageSent(msg_id));
+        Ok(sent) => {
+            let _ = tx.send(Message::MessageSent(
+                sent.message_id,
+                sent.conversation_message_id,
+            ));
         }
         Err(e) => {
             let _ = tx.send(Message::SendFailed(format!(
@@ -315,8 +324,11 @@ async fn send_photo_attachment(
         .send_photo(peer_id, Path::new(&path))
         .await
     {
-        Ok(msg_id) => {
-            let _ = tx.send(Message::MessageSent(msg_id));
+        Ok(sent) => {
+            let _ = tx.send(Message::MessageSent(
+                sent.message_id,
+                sent.conversation_message_id,
+            ));
         }
         Err(e) => {
             let _ = tx.send(Message::SendFailed(format!("Failed to send photo: {}", e)));
@@ -332,8 +344,11 @@ async fn send_doc_attachment(
     tx: mpsc::UnboundedSender<Message>,
 ) {
     match client.messages().send_doc(peer_id, Path::new(&path)).await {
-        Ok(msg_id) => {
-            let _ = tx.send(Message::MessageSent(msg_id));
+        Ok(sent) => {
+            let _ = tx.send(Message::MessageSent(
+                sent.message_id,
+                sent.conversation_message_id,
+            ));
         }
         Err(e) => {
             let _ = tx.send(Message::SendFailed(format!("Failed to send file: {}", e)));
@@ -349,7 +364,11 @@ async fn edit_message(
     text: String,
     tx: mpsc::UnboundedSender<Message>,
 ) {
-    match client.messages().edit(peer_id, cmid, &text).await {
+    match client
+        .messages()
+        .edit(peer_id, cmid, &text)
+        .await
+    {
         Ok(()) => {
             let _ = tx.send(Message::MessageEdited(cmid));
         }
@@ -358,6 +377,52 @@ async fn edit_message(
                 "Failed to edit message: {}",
                 e
             )));
+        }
+    }
+}
+
+/// Delete message via VK API
+async fn delete_message(
+    client: Arc<VkClient>,
+    message_id: i64,
+    delete_for_all: bool,
+    tx: mpsc::UnboundedSender<Message>,
+) {
+    match client
+        .messages()
+        .delete(&[message_id], delete_for_all)
+        .await
+    {
+        Ok(()) => {
+            let _ = tx.send(Message::MessageDeleted(message_id));
+        }
+        Err(e) => {
+            let _ = tx.send(Message::SendFailed(format!(
+                "Failed to delete message: {}",
+                e
+            )));
+        }
+    }
+}
+
+/// Fetch message by ID to get cmid
+async fn fetch_message_by_id(
+    client: Arc<VkClient>,
+    msg_id: i64,
+    tx: mpsc::UnboundedSender<Message>,
+) {
+    match client.messages().get_by_id(&[msg_id]).await {
+        Ok(messages) => {
+            if let Some(msg) = messages.first() {
+                let _ = tx.send(Message::MessageDetailsFetched(
+                    msg.id,
+                    msg.conversation_message_id,
+                ));
+            }
+        }
+        Err(e) => {
+            // Not critical, just log
+            tracing::warn!("Failed to fetch message details: {}", e);
         }
     }
 }
@@ -478,6 +543,26 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                         {
                             tracing::debug!("Event type: {}", event_type);
                             match event_type {
+                                2 => {
+                                    // Message deleted
+                                    // Format: [2, message_id, flags, peer_id]
+                                    if let (Some(message_id), Some(peer_id)) = (
+                                        arr.get(1).and_then(|v| v.as_i64()),
+                                        arr.get(3).and_then(|v| v.as_i64()),
+                                    ) {
+                                        tracing::info!(
+                                            "Message deleted: {} in {}",
+                                            message_id,
+                                            peer_id
+                                        );
+                                        let _ = tx.send(Message::VkEvent(
+                                            VkEvent::MessageDeletedFromLongPoll {
+                                                peer_id,
+                                                message_id,
+                                            },
+                                        ));
+                                    }
+                                }
                                 4 => {
                                     // New message
                                     // Format: [4, message_id, flags, peer_id, timestamp, text, extra, attachments]
@@ -511,6 +596,29 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                                             text: text.to_string(),
                                             from_id,
                                         }));
+                                    }
+                                }
+                                5 => {
+                                    // Message edited
+                                    // Format: [5, message_id, flags, peer_id, timestamp, new_text, extra]
+                                    if let (Some(message_id), Some(peer_id)) = (
+                                        arr.get(1).and_then(|v| v.as_i64()),
+                                        arr.get(3).and_then(|v| v.as_i64()),
+                                    ) {
+                                        let text = arr.get(5).and_then(|v| v.as_str()).unwrap_or("");
+                                        tracing::info!(
+                                            "Message edited: {} in {}: {}",
+                                            message_id,
+                                            peer_id,
+                                            text
+                                        );
+                                        let _ = tx.send(Message::VkEvent(
+                                            VkEvent::MessageEditedFromLongPoll {
+                                                peer_id,
+                                                message_id,
+                                                text: text.to_string(),
+                                            },
+                                        ));
                                     }
                                 }
                                 61 => {

@@ -16,7 +16,7 @@ pub use group::Group;
 pub use longpoll::{LongPollResponse, LongPollServer};
 pub use message::{
     ChatPhoto, ChatSettings, Conversation, ConversationItem, ConversationsResponse, Message,
-    MessagesHistoryResponse,
+    MessagesHistoryResponse, SentMessage,
 };
 pub use misc::{CanWrite, City, Counters, Country, ProfileInfo};
 pub use upload::{DocInfo, SavedDoc, SavedPhoto, UploadDocResponse, UploadServer};

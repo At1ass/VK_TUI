@@ -167,12 +167,12 @@ impl<'a> MessagesApi<'a> {
     /// * `message` - Message text (max: 4096 chars)
     ///
     /// # Returns
-    /// Message ID
+    /// SentMessage with message_id and conversation_message_id
     ///
     /// # VK API
     /// Method: messages.send
     /// https://dev.vk.com/method/messages.send
-    pub async fn send(&self, peer_id: i64, message: &str) -> Result<i64> {
+    pub async fn send(&self, peer_id: i64, message: &str) -> Result<SentMessage> {
         self.send_with_params(peer_id, message, None, None, None)
             .await
     }
@@ -181,7 +181,12 @@ impl<'a> MessagesApi<'a> {
     ///
     /// # VK API
     /// Method: messages.send (with reply_to parameter)
-    pub async fn send_with_reply(&self, peer_id: i64, message: &str, reply_to: i64) -> Result<i64> {
+    pub async fn send_with_reply(
+        &self,
+        peer_id: i64,
+        message: &str,
+        reply_to: i64,
+    ) -> Result<SentMessage> {
         self.send_with_params(peer_id, message, Some(reply_to), None, None)
             .await
     }
@@ -195,7 +200,7 @@ impl<'a> MessagesApi<'a> {
         peer_id: i64,
         message: &str,
         forward_messages: &[i64],
-    ) -> Result<i64> {
+    ) -> Result<SentMessage> {
         self.send_with_params(peer_id, message, None, Some(forward_messages), None)
             .await
     }
@@ -212,7 +217,7 @@ impl<'a> MessagesApi<'a> {
         peer_id: i64,
         message: &str,
         attachment: &str,
-    ) -> Result<i64> {
+    ) -> Result<SentMessage> {
         self.send_with_params(peer_id, message, None, None, Some(attachment))
             .await
     }
@@ -225,8 +230,9 @@ impl<'a> MessagesApi<'a> {
         reply_to: Option<i64>,
         forward_messages: Option<&[i64]>,
         attachment: Option<&str>,
-    ) -> Result<i64> {
+    ) -> Result<SentMessage> {
         let mut params = HashMap::new();
+        // Use peer_id as in web version
         params.insert("peer_id", peer_id.to_string());
 
         if !message.is_empty() {
@@ -248,7 +254,19 @@ impl<'a> MessagesApi<'a> {
 
         params.insert("random_id", generate_random_id().to_string());
 
-        self.client.request("messages.send", params).await
+        // Parse response as object with cmid and message_id
+        #[derive(Debug, serde::Deserialize)]
+        struct SendResponse {
+            cmid: i64,
+            message_id: i64,
+        }
+
+        let response: SendResponse = self.client.request("messages.send", params).await?;
+
+        Ok(SentMessage {
+            message_id: response.message_id,
+            conversation_message_id: response.cmid,
+        })
     }
 
     // ========== Edit/Delete ==========
@@ -257,16 +275,21 @@ impl<'a> MessagesApi<'a> {
     ///
     /// # Arguments
     /// * `peer_id` - Peer ID
-    /// * `cmid` - Conversation message ID (local ID in conversation)
+    /// * `conversation_message_id` - Conversation message ID (cmid)
     /// * `message` - New message text
     ///
     /// # VK API
     /// Method: messages.edit
     /// https://dev.vk.com/method/messages.edit
-    pub async fn edit(&self, peer_id: i64, cmid: i64, message: &str) -> Result<()> {
+    pub async fn edit(
+        &self,
+        peer_id: i64,
+        conversation_message_id: i64,
+        message: &str,
+    ) -> Result<()> {
         let mut params = HashMap::new();
         params.insert("peer_id", peer_id.to_string());
-        params.insert("cmid", cmid.to_string());
+        params.insert("cmid", conversation_message_id.to_string());
         params.insert("message", message.to_string());
 
         let _: i32 = self.client.request("messages.edit", params).await?;
@@ -293,6 +316,29 @@ impl<'a> MessagesApi<'a> {
 
         let _: serde_json::Value = self.client.request("messages.delete", params).await?;
         Ok(())
+    }
+
+    /// Get messages by their IDs
+    ///
+    /// # Arguments
+    /// * `message_ids` - Array of message IDs (up to 100)
+    ///
+    /// # VK API
+    /// Method: messages.getById
+    /// https://dev.vk.com/method/messages.getById
+    pub async fn get_by_id(&self, message_ids: &[i64]) -> Result<Vec<Message>> {
+        let mut params = HashMap::new();
+        let ids: Vec<String> = message_ids.iter().map(|id| id.to_string()).collect();
+        params.insert("message_ids", ids.join(","));
+
+        #[derive(Debug, serde::Deserialize)]
+        struct Response {
+            items: Vec<Message>,
+        }
+
+        let response: Response = self.client.request("messages.getById", params).await?;
+
+        Ok(response.items)
     }
 
     // ========== Search ==========
@@ -484,7 +530,7 @@ impl<'a> MessagesApi<'a> {
     /// 2. Uploads photo
     /// 3. Saves photo
     /// 4. Sends message with photo attachment
-    pub async fn send_photo(&self, peer_id: i64, photo_path: &Path) -> Result<i64> {
+    pub async fn send_photo(&self, peer_id: i64, photo_path: &Path) -> Result<SentMessage> {
         // Get upload server
         let mut server_params = HashMap::new();
         server_params.insert("peer_id", peer_id.to_string());
@@ -548,7 +594,7 @@ impl<'a> MessagesApi<'a> {
     /// 2. Uploads document
     /// 3. Saves document
     /// 4. Sends message with document attachment
-    pub async fn send_doc(&self, peer_id: i64, doc_path: &Path) -> Result<i64> {
+    pub async fn send_doc(&self, peer_id: i64, doc_path: &Path) -> Result<SentMessage> {
         // Get upload server
         let mut params = HashMap::new();
         params.insert("type", "doc".to_string());
