@@ -101,6 +101,15 @@ pub enum AttachmentKind {
 pub struct ReplyPreview {
     pub from: String,
     pub text: String,
+    pub attachments: Vec<AttachmentInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForwardItem {
+    pub from: String,
+    pub text: String,
+    pub attachments: Vec<AttachmentInfo>,
+    pub nested: Vec<ForwardItem>,
 }
 
 /// A single message
@@ -121,7 +130,7 @@ pub struct ChatMessage {
     pub attachments: Vec<AttachmentInfo>,
     pub reply: Option<ReplyPreview>,
     pub fwd_count: usize,
-    pub forwards: Vec<ReplyPreview>,
+    pub forwards: Vec<ForwardItem>,
 }
 
 /// Async actions to be performed in background
@@ -240,6 +249,6 @@ pub struct ForwardState {
 
 #[derive(Debug, Clone)]
 pub struct ForwardView {
-    pub items: Vec<ReplyPreview>,
+    pub items: Vec<ForwardItem>,
     pub selected: usize,
 }

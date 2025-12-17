@@ -134,7 +134,7 @@ pub enum Message {
         attachments: Option<Vec<AttachmentInfo>>,
         reply: Option<ReplyPreview>,
         fwd_count: Option<usize>,
-        forwards: Option<Vec<ReplyPreview>>,
+        forwards: Option<Vec<crate::state::ForwardItem>>,
     },
     /// Error occurred
     Error(String),

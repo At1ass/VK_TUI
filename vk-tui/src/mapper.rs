@@ -1,5 +1,7 @@
 //! Helpers to map VK API models into internal UI models.
-use crate::state::{AttachmentInfo, AttachmentKind, ChatMessage, DeliveryStatus, ReplyPreview};
+use crate::state::{
+    AttachmentInfo, AttachmentKind, ChatMessage, DeliveryStatus, ForwardItem, ReplyPreview,
+};
 use vk_api::Message;
 use vk_api::User;
 
@@ -115,9 +117,45 @@ pub fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
 }
 
 pub fn map_reply(profiles: &[User], r: &Message) -> ReplyPreview {
+    let attachments = r
+        .attachments
+        .clone()
+        .into_iter()
+        .map(map_attachment)
+        .collect();
     ReplyPreview {
         from: get_name(profiles, r.from_id),
-        text: r.text.clone(),
+        text: if r.text.is_empty() {
+            "[attachment]".to_string()
+        } else {
+            r.text.clone()
+        },
+        attachments,
+    }
+}
+
+pub fn map_forward_tree(profiles: &[User], m: &Message) -> ForwardItem {
+    let attachments = m
+        .attachments
+        .clone()
+        .into_iter()
+        .map(map_attachment)
+        .collect();
+    let nested = m
+        .fwd_messages
+        .iter()
+        .map(|fm| map_forward_tree(profiles, fm))
+        .collect();
+
+    ForwardItem {
+        from: get_name(profiles, m.from_id),
+        text: if m.text.is_empty() {
+            "[attachment]".to_string()
+        } else {
+            m.text.clone()
+        },
+        attachments,
+        nested,
     }
 }
 
@@ -145,7 +183,7 @@ pub fn map_history_message(profiles: &[User], msg: &Message, out_read: i64) -> C
     let forwards = msg
         .fwd_messages
         .iter()
-        .map(|m| map_reply(profiles, m))
+        .map(|m| map_forward_tree(profiles, m))
         .collect::<Vec<_>>();
     let fwd_count = forwards.len();
 

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use vk_api::VkClient;
 
+use crate::mapper::map_forward_tree;
 use crate::mapper::{map_attachment, map_history_message, map_reply};
 use crate::message::Message;
 use crate::state::AttachmentInfo;
@@ -224,7 +225,7 @@ pub async fn fetch_message_by_id(
                 let forwards = msg
                     .fwd_messages
                     .iter()
-                    .map(|m| map_reply(&[], m))
+                    .map(|m| map_forward_tree(&[], m))
                     .collect::<Vec<_>>();
                 let fwd_count = forwards.len();
 

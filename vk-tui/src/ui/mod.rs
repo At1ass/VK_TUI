@@ -663,15 +663,12 @@ fn render_forward_view_popup(app: &App, frame: &mut Frame) {
         return;
     }
 
-    let items: Vec<ListItem> = view
-        .items
+    let flattened = super::update::flatten_forwards(&view.items, 0);
+    let items: Vec<ListItem> = flattened
         .iter()
-        .map(|f| {
-            ListItem::new(Line::from(vec![
-                Span::styled(&f.from, Style::default().fg(Color::Cyan)),
-                Span::raw(": "),
-                Span::raw(truncate_str(&f.text, 120)),
-            ]))
+        .map(|(indent, text)| {
+            let pad = "  ".repeat(*indent);
+            ListItem::new(Line::from(vec![Span::raw(format!("{}{}", pad, text))]))
         })
         .collect();
 

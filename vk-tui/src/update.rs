@@ -1011,3 +1011,18 @@ fn forward_filter(chats: &[Chat], query: &str) -> Vec<Chat> {
         .cloned()
         .collect()
 }
+
+pub fn flatten_forwards(
+    items: &[crate::state::ForwardItem],
+    indent: usize,
+) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    for item in items {
+        let text = format!("{}: {}", item.from, truncate_str(&item.text, 120));
+        out.push((indent, text));
+        if !item.nested.is_empty() {
+            out.extend(flatten_forwards(&item.nested, indent + 1));
+        }
+    }
+    out
+}
