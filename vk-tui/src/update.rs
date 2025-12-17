@@ -356,6 +356,36 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 app.status = Some(format!("Pin message {} in {}", msg.id, peer_id));
             }
         }
+        Message::ViewForwarded => {
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                if msg.forwards.is_empty() {
+                    app.status = Some("No forwarded content to view".into());
+                } else {
+                    app.forward_view = Some(crate::state::ForwardView {
+                        items: msg.forwards.clone(),
+                        selected: 0,
+                    });
+                }
+            }
+        }
+        Message::ForwardViewClose => {
+            app.forward_view = None;
+        }
+        Message::ForwardViewUp => {
+            if let Some(view) = app.forward_view.as_mut() {
+                view.selected = view.selected.saturating_sub(1);
+            }
+        }
+        Message::ForwardViewDown => {
+            if let Some(view) = app.forward_view.as_mut() {
+                if !view.items.is_empty() && view.selected + 1 < view.items.len() {
+                    view.selected += 1;
+                }
+            }
+        }
         Message::ForwardMessage => {
             if app.screen == Screen::Main
                 && app.focus == Focus::Messages
@@ -477,6 +507,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                             attachments: Vec::new(),
                             reply: None,
                             fwd_count: 1,
+                            forwards: Vec::new(),
                         });
                         app.messages_scroll = app.messages.len().saturating_sub(1);
 
@@ -577,6 +608,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             attachments,
             reply,
             fwd_count,
+            forwards,
         } => {
             if let Some(msg) = app.messages.iter_mut().find(|m| m.id == message_id) {
                 if let Some(cmid) = cmid {
@@ -596,6 +628,9 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 }
                 if let Some(fwd) = fwd_count {
                     msg.fwd_count = fwd;
+                }
+                if let Some(fwds) = forwards {
+                    msg.forwards = fwds;
                 }
             }
         }
@@ -671,6 +706,7 @@ fn handle_send_command(app: &mut App, peer_id: i64, cmd: SendCommand) -> Option<
                 }],
                 reply: None,
                 fwd_count: 0,
+                forwards: Vec::new(),
             });
             app.messages_scroll = app.messages.len().saturating_sub(1);
             app.input.clear();
@@ -706,6 +742,7 @@ fn handle_send_command(app: &mut App, peer_id: i64, cmd: SendCommand) -> Option<
                 }],
                 reply: None,
                 fwd_count: 0,
+                forwards: Vec::new(),
             });
             app.messages_scroll = app.messages.len().saturating_sub(1);
             app.input.clear();
@@ -741,6 +778,7 @@ fn handle_send_command(app: &mut App, peer_id: i64, cmd: SendCommand) -> Option<
                     }],
                     reply: None,
                     fwd_count: 0,
+                    forwards: Vec::new(),
                 });
                 app.messages_scroll = app.messages.len().saturating_sub(1);
                 app.input.clear();
@@ -781,6 +819,7 @@ fn handle_vk_event(app: &mut App, event: VkEvent) -> Option<Message> {
                     attachments: Vec::new(),
                     reply: None,
                     fwd_count: 0,
+                    forwards: Vec::new(),
                 });
                 app.messages_scroll = app.messages.len().saturating_sub(1);
                 app.send_action(AsyncAction::MarkAsRead(peer_id));

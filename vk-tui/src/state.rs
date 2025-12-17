@@ -121,6 +121,7 @@ pub struct ChatMessage {
     pub attachments: Vec<AttachmentInfo>,
     pub reply: Option<ReplyPreview>,
     pub fwd_count: usize,
+    pub forwards: Vec<ReplyPreview>,
 }
 
 /// Async actions to be performed in background
@@ -182,6 +183,7 @@ pub struct App {
     pub is_loading: bool,
     pub editing_message: Option<usize>,
     pub show_help: bool,
+    pub forward_view: Option<ForwardView>,
 
     // Async action sender
     pub action_tx: Option<mpsc::UnboundedSender<AsyncAction>>,
@@ -213,6 +215,7 @@ impl Default for App {
             is_loading: false,
             editing_message: None,
             show_help: false,
+            forward_view: None,
             forward: None,
             action_tx: None,
         }
@@ -233,4 +236,10 @@ pub struct ForwardState {
     pub selected: usize,
     pub comment: String,
     pub stage: ForwardStage,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForwardView {
+    pub items: Vec<ReplyPreview>,
+    pub selected: usize,
 }

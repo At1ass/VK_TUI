@@ -221,7 +221,12 @@ pub async fn fetch_message_by_id(
                     .map(map_attachment)
                     .collect::<Vec<_>>();
                 let reply = msg.reply_message.as_ref().map(|r| map_reply(&[], r));
-                let fwd_count = msg.fwd_messages.len();
+                let forwards = msg
+                    .fwd_messages
+                    .iter()
+                    .map(|m| map_reply(&[], m))
+                    .collect::<Vec<_>>();
+                let fwd_count = forwards.len();
 
                 let _ = tx.send(Message::MessageDetailsFetched {
                     message_id: msg.id,
@@ -231,6 +236,7 @@ pub async fn fetch_message_by_id(
                     attachments: Some(attachments),
                     reply,
                     fwd_count: Some(fwd_count),
+                    forwards: Some(forwards),
                 });
             }
         }

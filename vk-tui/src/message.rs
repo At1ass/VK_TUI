@@ -78,6 +78,8 @@ pub enum Message {
     YankMessage,
     /// Pin/unpin message
     PinMessage,
+    /// View forwarded content
+    ViewForwarded,
     /// Open link from selected message
     OpenLink,
     /// Download attachments from selected message
@@ -93,6 +95,10 @@ pub enum Message {
     ForwardCommentChar(char),
     ForwardCommentBackspace,
     ForwardCommentDeleteWord,
+    /// Forward view popup events
+    ForwardViewClose,
+    ForwardViewUp,
+    ForwardViewDown,
 
     // Search
     /// Start search mode
@@ -128,6 +134,7 @@ pub enum Message {
         attachments: Option<Vec<AttachmentInfo>>,
         reply: Option<ReplyPreview>,
         fwd_count: Option<usize>,
+        forwards: Option<Vec<ReplyPreview>>,
     },
     /// Error occurred
     Error(String),
@@ -230,6 +237,16 @@ impl Message {
         }
     }
 
+    /// Handle keys when forward-view popup is open
+    pub fn from_forward_view_key_event(key: KeyEvent) -> Self {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => Message::ForwardViewClose,
+            KeyCode::Up | KeyCode::Char('k') => Message::ForwardViewUp,
+            KeyCode::Down | KeyCode::Char('j') => Message::ForwardViewDown,
+            _ => Message::Noop,
+        }
+    }
+
     /// Handle keys in normal mode - context-aware based on focus
     fn normal_mode_key(key: KeyEvent, focus: Focus) -> Self {
         // Global Normal mode keys (work in all focuses)
@@ -298,6 +315,7 @@ impl Message {
             // Message actions
             KeyCode::Char('r') => Message::ReplyToMessage,
             KeyCode::Char('f') => Message::ForwardMessage,
+            KeyCode::Char('F') => Message::ViewForwarded,
             KeyCode::Char('e') => Message::EditMessage,
             KeyCode::Char('p') => Message::PinMessage,
 

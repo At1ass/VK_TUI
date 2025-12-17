@@ -305,6 +305,8 @@ async fn main() -> Result<()> {
                             Message::from_auth_key_event(key)
                         } else if let Some(fwd) = &app.forward {
                             Message::from_forward_key_event(key, fwd.stage.clone())
+                        } else if app.forward_view.is_some() {
+                            Message::from_forward_view_key_event(key)
                         } else {
                             Message::from_key_event(key, app.mode, app.focus, app.show_help)
                         };

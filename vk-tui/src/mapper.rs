@@ -142,7 +142,12 @@ pub fn map_history_message(profiles: &[User], msg: &Message, out_read: i64) -> C
         .map(map_attachment)
         .collect();
     let reply = msg.reply_message.as_ref().map(|r| map_reply(profiles, r));
-    let fwd_count = msg.fwd_messages.len();
+    let forwards = msg
+        .fwd_messages
+        .iter()
+        .map(|m| map_reply(profiles, m))
+        .collect::<Vec<_>>();
+    let fwd_count = forwards.len();
 
     ChatMessage {
         id: msg.id,
@@ -159,6 +164,7 @@ pub fn map_history_message(profiles: &[User], msg: &Message, out_read: i64) -> C
         attachments,
         reply,
         fwd_count,
+        forwards,
     }
 }
 
