@@ -6,6 +6,7 @@ mod mapper;
 mod message;
 mod state;
 mod ui;
+mod update;
 
 use std::io;
 use std::sync::Arc;
@@ -20,11 +21,11 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::sync::mpsc;
 
-use app::update;
 use event::{Event, VkEvent};
 use longpoll::handle_update;
 use message::Message;
 use state::{App, AsyncAction, Screen};
+use update::update;
 use vk_api::{User, VkClient};
 
 /// Initialize terminal
