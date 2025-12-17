@@ -288,15 +288,18 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
         let mut lines = vec![Line::from(first_line)];
 
         if let Some(reply) = &msg.reply {
-            lines.push(Line::from(vec![
-                Span::styled("↩ ", Style::default().fg(Color::Gray)),
-                Span::styled(reply.from.clone(), Style::default().fg(Color::Gray)),
-                Span::raw(": "),
-                Span::styled(
-                    truncate_str(&reply.text, 60),
-                    Style::default().fg(Color::Gray),
-                ),
-            ]));
+            lines.insert(
+                0,
+                Line::from(vec![
+                    Span::styled("↩ ", Style::default().fg(Color::Gray)),
+                    Span::styled(reply.from.clone(), Style::default().fg(Color::Gray)),
+                    Span::raw(": "),
+                    Span::styled(
+                        truncate_str(&reply.text, 60),
+                        Style::default().fg(Color::Gray),
+                    ),
+                ]),
+            );
         }
 
         if msg.fwd_count > 0 {
@@ -466,7 +469,7 @@ fn render_status(app: &App, frame: &mut Frame, area: Rect) {
         (Mode::Insert, _) => "Enter send | /sendfile PATH | /sendimg PATH | Esc back",
         (Mode::Normal, Focus::ChatList) => "j/k nav | l/Enter select | / search | : cmd | ? help",
         (Mode::Normal, Focus::Messages) => {
-            "j/k nav | i insert | r reply | e edit | dd delete | p pin | o link | ? help"
+            "j/k nav | i insert | r reply | f forward | F view fwds | e edit | dd delete | p pin | o link | ? help"
         }
         (Mode::Normal, Focus::Input) => "i insert mode | Esc back",
         (Mode::Command, _) => "Enter execute | Esc cancel",
