@@ -253,21 +253,31 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
             // Format timestamp
             let time = format_timestamp(msg.timestamp);
 
-            let mut lines = vec![Line::from(vec![
+            let mut first_line = vec![
                 Span::styled(time, Style::default().fg(Color::DarkGray)),
                 Span::raw(" "),
                 Span::styled(&msg.from_name, name_style),
                 Span::raw(": "),
                 Span::raw(&msg.text),
-                if read_indicator.is_empty() {
-                    Span::raw("")
-                } else {
-                    Span::styled(
-                        format!(" {}", read_indicator),
-                        Style::default().fg(Color::DarkGray),
-                    )
-                },
-            ])];
+            ];
+
+            // Add edited indicator
+            if msg.is_edited {
+                first_line.push(Span::styled(
+                    " (e)",
+                    Style::default().fg(Color::Yellow),
+                ));
+            }
+
+            // Add delivery status indicator
+            if !read_indicator.is_empty() {
+                first_line.push(Span::styled(
+                    format!(" {}", read_indicator),
+                    Style::default().fg(Color::DarkGray),
+                ));
+            }
+
+            let mut lines = vec![Line::from(first_line)];
 
             if let Some(reply) = &msg.reply {
                 lines.push(Line::from(vec![

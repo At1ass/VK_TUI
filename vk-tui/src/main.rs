@@ -242,6 +242,13 @@ fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
 async fn load_messages(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedSender<Message>) {
     match client.messages().get_history(peer_id, 0, 50).await {
         Ok(response) => {
+            // Get out_read from conversation to determine which outgoing messages are read
+            let out_read = response
+                .conversations
+                .first()
+                .and_then(|c| c.out_read)
+                .unwrap_or(0);
+
             // Messages come in reverse order (newest first), so reverse them
             let messages: Vec<ChatMessage> = response
                 .items
@@ -251,7 +258,13 @@ async fn load_messages(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedS
                     let from_name = get_name(&response.profiles, msg.from_id);
 
                     let is_outgoing = msg.is_outgoing();
-                    let is_read = msg.is_read();
+                    // For outgoing messages, check against out_read from conversation
+                    // For incoming messages, use read_state from message
+                    let is_read = if is_outgoing {
+                        msg.id <= out_read
+                    } else {
+                        msg.is_read()
+                    };
                     let text = if msg.text.is_empty() {
                         "[attachment]".to_string()
                     } else {
@@ -273,6 +286,7 @@ async fn load_messages(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedS
                         timestamp: msg.date,
                         is_outgoing,
                         is_read,
+                        is_edited: msg.update_time.is_some(),
                         delivery: DeliveryStatus::Sent,
                         attachments,
                         reply,

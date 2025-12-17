@@ -39,6 +39,10 @@ pub struct Message {
 
     #[serde(default)]
     pub reply_message: Option<Box<Message>>,
+
+    /// Update timestamp (present if message was edited)
+    #[serde(default)]
+    pub update_time: Option<i64>,
 }
 
 impl Message {
@@ -71,6 +75,14 @@ pub struct Conversation {
 
     #[serde(default)]
     pub can_write: Option<CanWrite>,
+
+    /// ID of last incoming message read by user
+    #[serde(default)]
+    pub in_read: Option<i64>,
+
+    /// ID of last outgoing message read by opponent
+    #[serde(default)]
+    pub out_read: Option<i64>,
 }
 
 /// Chat settings for group chats
@@ -106,6 +118,10 @@ pub struct MessagesHistoryResponse {
 
     #[serde(default)]
     pub groups: Vec<Group>,
+
+    /// Conversations info (returned when extended=1)
+    #[serde(default)]
+    pub conversations: Vec<Conversation>,
 }
 
 /// Conversations list response

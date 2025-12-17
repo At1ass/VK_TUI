@@ -86,6 +86,7 @@ pub struct ChatMessage {
     pub timestamp: i64,
     pub is_outgoing: bool,
     pub is_read: bool,
+    pub is_edited: bool,
     pub delivery: DeliveryStatus,
     pub attachments: Vec<AttachmentInfo>,
     pub reply: Option<ReplyPreview>,
@@ -611,6 +612,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                         timestamp: chrono_timestamp(),
                                         is_outgoing: true,
                                         is_read: false,
+                                        is_edited: false,
                                         delivery: DeliveryStatus::Pending,
                                         attachments: vec![AttachmentInfo {
                                             kind: AttachmentKind::File,
@@ -643,6 +645,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                         timestamp: chrono_timestamp(),
                                         is_outgoing: true,
                                         is_read: false,
+                                        is_edited: false,
                                         delivery: DeliveryStatus::Pending,
                                         attachments: vec![AttachmentInfo {
                                             kind: AttachmentKind::Photo,
@@ -675,6 +678,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                             timestamp: chrono_timestamp(),
                                             is_outgoing: true,
                                             is_read: false,
+                                            is_edited: false,
                                             delivery: DeliveryStatus::Pending,
                                             attachments: vec![AttachmentInfo {
                                                 kind: AttachmentKind::Photo,
@@ -717,6 +721,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                             timestamp: chrono_timestamp(),
                             is_outgoing: true,
                             is_read: false,
+                            is_edited: false,
                             delivery: DeliveryStatus::Pending,
                             attachments: Vec::new(),
                             reply: None,
@@ -761,6 +766,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                             timestamp: chrono_timestamp(),
                             is_outgoing: from_id == app.auth.user_id().unwrap_or(0),
                             is_read: true,
+                            is_edited: false,
                             delivery: DeliveryStatus::Sent,
                             attachments: Vec::new(),
                             reply: None,
@@ -779,12 +785,16 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     }
                     if app.current_peer_id == Some(peer_id) {
                         if message_id > 0 {
-                            if let Some(msg) = app.messages.iter_mut().find(|m| m.id == message_id)
-                            {
-                                msg.is_read = true;
-                                msg.delivery = DeliveryStatus::Sent;
+                            // Mark all outgoing messages up to message_id as read
+                            // This handles Long Poll event 7 (outgoing messages read by opponent)
+                            for msg in app.messages.iter_mut() {
+                                if msg.is_outgoing && msg.id <= message_id {
+                                    msg.is_read = true;
+                                    msg.delivery = DeliveryStatus::Sent;
+                                }
                             }
                         } else {
+                            // message_id == 0: mark all outgoing messages as read
                             for msg in app.messages.iter_mut().filter(|m| m.is_outgoing) {
                                 msg.is_read = true;
                                 msg.delivery = DeliveryStatus::Sent;
@@ -801,6 +811,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     if app.current_peer_id == Some(peer_id) {
                         if let Some(msg) = app.messages.iter_mut().find(|m| m.id == message_id) {
                             msg.text = text.clone();
+                            msg.is_edited = true;
                             app.status = Some("Message updated from web".into());
                         }
                     }
@@ -889,6 +900,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             app.editing_message = None;
             if let Some(msg) = app.messages.iter_mut().find(|m| m.cmid == Some(cmid)) {
                 msg.delivery = DeliveryStatus::Sent;
+                msg.is_edited = true;
             }
         }
 
