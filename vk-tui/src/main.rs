@@ -163,6 +163,7 @@ fn get_user_online(peer_id: &i64, profiles: &[User]) -> bool {
 /// Run Long Poll loop for real-time updates
 async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>) {
     tracing::info!("Starting Long Poll...");
+    let mut backoff = Duration::from_secs(1);
 
     // Get Long Poll server
     let mut server = match client.longpoll().get_server().await {
@@ -224,17 +225,20 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                         }
                     }
                 }
+                backoff = Duration::from_secs(1);
             }
             Err(e) => {
                 let _ = tx.send(Message::VkEvent(VkEvent::ConnectionStatus(false)));
                 let _ = tx.send(Message::Error(format!("Long Poll error: {}", e)));
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(30));
 
                 // Try to reconnect
                 match client.longpoll().get_server().await {
                     Ok(new_server) => {
                         server = new_server;
                         let _ = tx.send(Message::VkEvent(VkEvent::ConnectionStatus(true)));
+                        backoff = Duration::from_secs(1);
                     }
                     Err(_) => continue,
                 }

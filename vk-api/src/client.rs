@@ -55,9 +55,18 @@ impl VkClient {
             .await
             .context("Failed to read response body")?;
         let truncated = truncate_body(&text);
+        tracing::trace!(
+            target: "vk_api::http",
+            "VK {} responded status {} body {}",
+            method,
+            status.as_u16(),
+            truncated
+        );
+
         let vk_response: VkResponse<T> = serde_json::from_str(&text).map_err(|e| {
             anyhow::anyhow!(
-                "Failed to parse response (status {}): {}; body: {}",
+                "{}: failed to parse response (status {}): {}; body: {}",
+                method,
                 status.as_u16(),
                 e,
                 truncated
@@ -65,7 +74,20 @@ impl VkClient {
         })?;
 
         if let Some(error) = vk_response.error {
-            anyhow::bail!("VK API error {}: {}", error.error_code, error.error_msg);
+            tracing::warn!(
+                target: "vk_api::http",
+                "VK {} error {}: {}; body {}",
+                method,
+                error.error_code,
+                error.error_msg,
+                truncated
+            );
+            anyhow::bail!(
+                "VK API error {} on {}: {}",
+                error.error_code,
+                method,
+                error.error_msg
+            );
         }
 
         vk_response.response.context("Empty response from VK API")
