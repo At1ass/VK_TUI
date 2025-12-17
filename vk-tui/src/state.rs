@@ -127,8 +127,9 @@ pub struct ChatMessage {
 #[derive(Debug, Clone)]
 pub enum AsyncAction {
     LoadConversations,
-    LoadMessages(i64),        // peer_id
-    SendMessage(i64, String), // peer_id, text
+    LoadMessages(i64),                  // peer_id
+    SendMessage(i64, String),           // peer_id, text
+    SendForward(i64, Vec<i64>, String), // peer_id, message_ids, comment
     StartLongPoll,
     MarkAsRead(i64),
     SendPhoto(i64, String), // peer_id, path
@@ -146,6 +147,9 @@ pub struct App {
     pub screen: Screen,
     pub focus: Focus,
     pub mode: Mode,
+
+    // Forward modal state
+    pub forward: Option<ForwardState>,
 
     // Auth state
     pub auth: AuthManager,
@@ -209,7 +213,24 @@ impl Default for App {
             is_loading: false,
             editing_message: None,
             show_help: false,
+            forward: None,
             action_tx: None,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum ForwardStage {
+    SelectTarget,
+    EnterComment { peer_id: i64, title: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct ForwardState {
+    pub source_message_id: i64,
+    pub query: String,
+    pub filtered: Vec<Chat>,
+    pub selected: usize,
+    pub comment: String,
+    pub stage: ForwardStage,
 }

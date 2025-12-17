@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::event::VkEvent;
-use crate::state::{AttachmentInfo, Chat, ChatMessage, Focus, Mode, ReplyPreview};
+use crate::state::{AttachmentInfo, Chat, ChatMessage, Focus, ForwardStage, Mode, ReplyPreview};
 use vk_api::User;
 
 /// Messages for the TEA update loop
@@ -82,6 +82,17 @@ pub enum Message {
     OpenLink,
     /// Download attachments from selected message
     DownloadAttachment,
+    /// Forward modal events
+    ForwardCancel,
+    ForwardQueryChar(char),
+    ForwardQueryBackspace,
+    ForwardQueryDeleteWord,
+    ForwardMoveUp,
+    ForwardMoveDown,
+    ForwardSubmit,
+    ForwardCommentChar(char),
+    ForwardCommentBackspace,
+    ForwardCommentDeleteWord,
 
     // Search
     /// Start search mode
@@ -185,6 +196,37 @@ impl Message {
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => Message::ClosePopup,
             _ => Message::Noop,
+        }
+    }
+
+    /// Handle keys when forward popup is open
+    pub fn from_forward_key_event(key: KeyEvent, stage: ForwardStage) -> Self {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => return Message::ForwardCancel,
+            _ => {}
+        }
+
+        match stage {
+            ForwardStage::SelectTarget => match key.code {
+                KeyCode::Up | KeyCode::Char('k') => Message::ForwardMoveUp,
+                KeyCode::Down | KeyCode::Char('j') => Message::ForwardMoveDown,
+                KeyCode::Enter => Message::ForwardSubmit,
+                KeyCode::Backspace => Message::ForwardQueryBackspace,
+                KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    Message::ForwardQueryDeleteWord
+                }
+                KeyCode::Char(c) => Message::ForwardQueryChar(c),
+                _ => Message::Noop,
+            },
+            ForwardStage::EnterComment { .. } => match key.code {
+                KeyCode::Enter => Message::ForwardSubmit,
+                KeyCode::Backspace => Message::ForwardCommentBackspace,
+                KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    Message::ForwardCommentDeleteWord
+                }
+                KeyCode::Char(c) => Message::ForwardCommentChar(c),
+                _ => Message::Noop,
+            },
         }
     }
 

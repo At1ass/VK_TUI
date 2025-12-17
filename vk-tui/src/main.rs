@@ -90,6 +90,9 @@ fn spawn_action_handler(
                 AsyncAction::SendMessage(peer_id, text) => {
                     tokio::spawn(actions::send_message(client, peer_id, text, tx));
                 }
+                AsyncAction::SendForward(peer_id, ids, comment) => {
+                    tokio::spawn(actions::send_forward(client, peer_id, ids, comment, tx));
+                }
                 AsyncAction::StartLongPoll => {
                     tokio::spawn(run_long_poll(client, tx));
                 }
@@ -300,6 +303,8 @@ async fn main() -> Result<()> {
                         // Auth screen uses dedicated input handling; main screen uses modes
                         let msg = if app.screen == Screen::Auth {
                             Message::from_auth_key_event(key)
+                        } else if let Some(fwd) = &app.forward {
+                            Message::from_forward_key_event(key, fwd.stage.clone())
                         } else {
                             Message::from_key_event(key, app.mode, app.focus, app.show_help)
                         };

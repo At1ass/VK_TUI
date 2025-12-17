@@ -6,13 +6,18 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 
-use crate::state::{App, AttachmentKind, DeliveryStatus, Focus, Mode, Screen};
+use crate::state::{App, AttachmentKind, DeliveryStatus, Focus, ForwardStage, Mode, Screen};
 
 /// Main view function - renders the entire UI
 pub fn view(app: &App, frame: &mut Frame) {
     match app.screen {
         Screen::Auth => render_auth_screen(app, frame),
         Screen::Main => render_main_screen(app, frame),
+    }
+
+    // Forward popup on top
+    if app.forward.is_some() {
+        render_forward_popup(app, frame);
     }
 
     // Render help popup on top if visible
@@ -510,6 +515,120 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let y = area.y + (area.height.saturating_sub(height)) / 2;
     Rect::new(x, y, width, height)
+}
+
+fn render_forward_popup(app: &App, frame: &mut Frame) {
+    let Some(fwd) = &app.forward else {
+        return;
+    };
+
+    let area = frame.area();
+    let width = (area.width as f32 * 0.7).max(40.0).min(100.0) as u16;
+    let height = (area.height as f32 * 0.7).max(12.0).min(30.0) as u16;
+    let popup_area = centered_rect(width, height, area);
+
+    frame.render_widget(Clear, popup_area);
+
+    match &fwd.stage {
+        ForwardStage::SelectTarget => {
+            let block = Block::default()
+                .title(" Forward to... ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1),
+                    Constraint::Length(2),
+                    Constraint::Min(3),
+                    Constraint::Length(1),
+                ])
+                .split(inner);
+
+            let query = Paragraph::new(format!("Search: {}", fwd.query))
+                .style(Style::default().fg(Color::White));
+            frame.render_widget(query, chunks[0]);
+
+            let hint =
+                Paragraph::new("Type to search, j/k to move, Enter to select, Esc to cancel")
+                    .style(Style::default().fg(Color::DarkGray));
+            frame.render_widget(hint, chunks[1]);
+
+            let items: Vec<ListItem> = fwd
+                .filtered
+                .iter()
+                .map(|chat| {
+                    let unread = if chat.unread_count > 0 {
+                        format!(" ({})", chat.unread_count)
+                    } else {
+                        String::new()
+                    };
+                    ListItem::new(Line::from(vec![
+                        Span::styled(&chat.title, Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(unread),
+                        Span::styled(
+                            format!("  [{}]", chat.id),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    ]))
+                })
+                .collect();
+
+            let list = List::new(items)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Conversations "),
+                )
+                .highlight_style(
+                    Style::default()
+                        .bg(Color::Blue)
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .highlight_symbol("▶ ");
+
+            let mut state = ListState::default();
+            if !fwd.filtered.is_empty() {
+                state.select(Some(fwd.selected));
+            }
+
+            frame.render_stateful_widget(list, chunks[2], &mut state);
+        }
+        ForwardStage::EnterComment { title, .. } => {
+            let block = Block::default()
+                .title(format!(" Forward to {} ", title))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(2),
+                    Constraint::Min(2),
+                    Constraint::Length(1),
+                ])
+                .split(inner);
+
+            let info = Paragraph::new("Enter comment (optional), Enter to send, Esc to cancel")
+                .style(Style::default().fg(Color::DarkGray));
+            frame.render_widget(info, chunks[0]);
+
+            let input_block = Block::default().borders(Borders::ALL);
+            let input = Paragraph::new(fwd.comment.as_str())
+                .block(input_block)
+                .wrap(Wrap { trim: false });
+            frame.render_widget(input, chunks[1]);
+
+            let cursor_x = visual_width(&fwd.comment, fwd.comment.chars().count());
+            frame.set_cursor_position((chunks[1].x + cursor_x as u16 + 1, chunks[1].y + 1));
+        }
+    }
 }
 
 /// Render help popup

@@ -6,8 +6,8 @@ use crate::event::VkEvent;
 use crate::input::{delete_word, insert_char_at, remove_char_at};
 use crate::message::Message;
 use crate::state::{
-    App, AsyncAction, AttachmentInfo, AttachmentKind, ChatMessage, DeliveryStatus, Focus, Mode,
-    RunningState, Screen,
+    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, DeliveryStatus, Focus,
+    ForwardStage, Mode, RunningState, Screen,
 };
 use vk_api::VkClient;
 
@@ -303,11 +303,6 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 app.status = Some("Reply is not implemented yet".into());
             }
         }
-        Message::ForwardMessage => {
-            if app.screen == Screen::Main && app.focus == Focus::Messages {
-                app.status = Some("Forward is not implemented yet".into());
-            }
-        }
         Message::DeleteMessage => {
             if app.screen == Screen::Main
                 && app.focus == Focus::Messages
@@ -359,6 +354,137 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 && let Some(peer_id) = app.current_peer_id
             {
                 app.status = Some(format!("Pin message {} in {}", msg.id, peer_id));
+            }
+        }
+        Message::ForwardMessage => {
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message()
+            {
+                if msg.id == 0 {
+                    app.status = Some("Cannot forward message that is not sent yet".into());
+                } else {
+                    let filtered = forward_filter(&app.chats, "");
+                    app.forward = Some(crate::state::ForwardState {
+                        source_message_id: msg.id,
+                        query: String::new(),
+                        filtered,
+                        selected: 0,
+                        comment: String::new(),
+                        stage: ForwardStage::SelectTarget,
+                    });
+                    app.status = Some("Select chat to forward (j/k, type to search)".into());
+                }
+            }
+        }
+        Message::ForwardCancel => {
+            app.forward = None;
+            app.status = Some("Forward cancelled".into());
+        }
+        Message::ForwardMoveUp => {
+            if let Some(fwd) = app.forward.as_mut() {
+                if fwd.selected > 0 {
+                    fwd.selected -= 1;
+                }
+            }
+        }
+        Message::ForwardMoveDown => {
+            if let Some(fwd) = app.forward.as_mut() {
+                if !fwd.filtered.is_empty() && fwd.selected + 1 < fwd.filtered.len() {
+                    fwd.selected += 1;
+                }
+            }
+        }
+        Message::ForwardQueryChar(c) => {
+            if let Some(fwd) = app.forward.as_mut()
+                && matches!(fwd.stage, ForwardStage::SelectTarget)
+            {
+                fwd.query.push(c);
+                fwd.filtered = forward_filter(&app.chats, &fwd.query);
+                if fwd.selected >= fwd.filtered.len() {
+                    fwd.selected = fwd.filtered.len().saturating_sub(1);
+                }
+            }
+        }
+        Message::ForwardQueryBackspace => {
+            if let Some(fwd) = app.forward.as_mut()
+                && matches!(fwd.stage, ForwardStage::SelectTarget)
+            {
+                fwd.query.pop();
+                fwd.filtered = forward_filter(&app.chats, &fwd.query);
+                if fwd.selected >= fwd.filtered.len() {
+                    fwd.selected = fwd.filtered.len().saturating_sub(1);
+                }
+            }
+        }
+        Message::ForwardQueryDeleteWord => {
+            if let Some(fwd) = app.forward.as_mut()
+                && matches!(fwd.stage, ForwardStage::SelectTarget)
+            {
+                let mut cursor = fwd.query.chars().count();
+                delete_word(&mut fwd.query, &mut cursor);
+                fwd.filtered = forward_filter(&app.chats, &fwd.query);
+                if fwd.selected >= fwd.filtered.len() {
+                    fwd.selected = fwd.filtered.len().saturating_sub(1);
+                }
+            }
+        }
+        Message::ForwardSubmit => {
+            if let Some(fwd) = app.forward.clone() {
+                match fwd.stage {
+                    ForwardStage::SelectTarget => {
+                        if fwd.filtered.is_empty() {
+                            app.status = Some("No chat matched".into());
+                        } else if let Some(chat) = fwd.filtered.get(fwd.selected) {
+                            if let Some(state) = app.forward.as_mut() {
+                                state.stage = ForwardStage::EnterComment {
+                                    peer_id: chat.id,
+                                    title: chat.title.clone(),
+                                };
+                                state.comment.clear();
+                                app.status = Some(format!(
+                                    "Forward to {}: add comment or Enter",
+                                    chat.title
+                                ));
+                            }
+                        }
+                    }
+                    ForwardStage::EnterComment { peer_id, .. } => {
+                        let comment = if let Some(state) = app.forward.take() {
+                            state.comment
+                        } else {
+                            String::new()
+                        };
+                        app.status = Some("Forwarding...".into());
+                        app.send_action(AsyncAction::SendForward(
+                            peer_id,
+                            vec![fwd.source_message_id],
+                            comment,
+                        ));
+                    }
+                }
+            }
+        }
+        Message::ForwardCommentChar(c) => {
+            if let Some(fwd) = app.forward.as_mut()
+                && matches!(fwd.stage, ForwardStage::EnterComment { .. })
+            {
+                fwd.comment.push(c);
+            }
+        }
+        Message::ForwardCommentBackspace => {
+            if let Some(fwd) = app.forward.as_mut()
+                && matches!(fwd.stage, ForwardStage::EnterComment { .. })
+            {
+                fwd.comment.pop();
+            }
+        }
+        Message::ForwardCommentDeleteWord => {
+            if let Some(fwd) = app.forward.as_mut()
+                && matches!(fwd.stage, ForwardStage::EnterComment { .. })
+            {
+                let mut cursor = fwd.comment.chars().count();
+                delete_word(&mut fwd.comment, &mut cursor);
             }
         }
 
@@ -805,4 +931,19 @@ fn truncate_str(s: &str, max_len: usize) -> String {
                 .collect::<String>()
         )
     }
+}
+
+fn forward_filter(chats: &[Chat], query: &str) -> Vec<Chat> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return chats.to_vec();
+    }
+    chats
+        .iter()
+        .filter(|c| {
+            let title = c.title.to_lowercase();
+            title.contains(&q) || c.id.to_string().contains(&q)
+        })
+        .cloned()
+        .collect()
 }
