@@ -115,6 +115,21 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 app.current_peer_id = None;
             }
         }
+        Message::OpenLink => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                if let Some(msg) = app.current_message() {
+                    if let Some(url) = first_url(msg) {
+                        if let Err(e) = open::that(&url) {
+                            app.status = Some(format!("Failed to open link: {}", e));
+                        } else {
+                            app.status = Some(format!("Opened {}", url));
+                        }
+                    } else {
+                        app.status = Some("No link in message".into());
+                    }
+                }
+            }
+        }
         Message::PageUp => {
             if app.screen == Screen::Main && app.focus == Focus::Messages {
                 app.messages_scroll = app.messages_scroll.saturating_sub(10);
@@ -240,6 +255,11 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         // Mode switches
         Message::EnterNormalMode => {
             app.mode = Mode::Normal;
+            if app.focus == Focus::Input {
+                app.focus = Focus::Messages;
+            }
+            app.command_input.clear();
+            app.command_cursor = 0;
             app.status = Some("Normal mode".into());
         }
         Message::EnterInsertMode => {
@@ -250,6 +270,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         Message::EnterCommandMode => {
             app.mode = Mode::Command;
             app.focus = Focus::Input;
+            app.command_input.clear();
+            app.command_cursor = 0;
             app.status = Some("Command mode".into());
         }
 
@@ -268,6 +290,68 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     } else {
                         app.send_action(AsyncAction::DownloadAttachments(downloadable));
                         app.status = Some("Downloading attachments...".into());
+                    }
+                }
+            }
+        }
+
+        // Message actions
+        Message::ReplyToMessage => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                app.status = Some("Reply is not implemented yet".into());
+            }
+        }
+        Message::ForwardMessage => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                app.status = Some("Forward is not implemented yet".into());
+            }
+        }
+        Message::DeleteMessage => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                if let Some(msg) = app.current_message().cloned() {
+                    if !msg.is_outgoing {
+                        app.status = Some("Can only delete your own messages".into());
+                        return None;
+                    }
+                    if msg.id == 0 {
+                        app.status = Some("Cannot delete message that is not sent yet".into());
+                        return None;
+                    }
+                    if let Some(peer_id) = app.current_peer_id {
+                        app.status = Some("Deleting message...".into());
+                        app.send_action(AsyncAction::DeleteMessage(peer_id, msg.id, false));
+                    }
+                }
+            }
+        }
+        Message::EditMessage => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                if let Some(msg) = app.current_message() {
+                    if !msg.is_outgoing {
+                        app.status = Some("Can only edit your own messages".into());
+                        return None;
+                    }
+                    app.input = msg.text.clone();
+                    app.input_cursor = app.input.chars().count();
+                    app.editing_message = Some(app.messages_scroll);
+                    app.mode = Mode::Insert;
+                    app.focus = Focus::Input;
+                    app.status = Some("Editing message (not yet saved)".into());
+                }
+            }
+        }
+        Message::YankMessage => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                if let Some(msg) = app.current_message() {
+                    app.status = Some(format!("Copied: {}", truncate_str(&msg.text, 50)));
+                }
+            }
+        }
+        Message::PinMessage => {
+            if app.screen == Screen::Main && app.focus == Focus::Messages {
+                if let Some(msg) = app.current_message() {
+                    if let Some(peer_id) = app.current_peer_id {
+                        app.status = Some(format!("Pin message {} in {}", msg.id, peer_id));
                     }
                 }
             }
@@ -384,7 +468,18 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
             app.status = Some(format!("Failed to send: {}", err));
         }
-        _ => {}
+        // Search / UI
+        Message::StartSearch => {
+            if app.screen == Screen::Main {
+                app.status = Some("Search not yet implemented".into());
+            }
+        }
+        Message::ToggleHelp => {
+            app.show_help = !app.show_help;
+        }
+        Message::ClosePopup => {
+            app.show_help = false;
+        }
     }
 
     None
@@ -675,4 +770,30 @@ fn read_clipboard_image() -> anyhow::Result<std::path::PathBuf> {
     let path = std::env::temp_dir().join("vk_tui_clipboard.png");
     std::fs::write(&path, data)?;
     Ok(path)
+}
+
+fn first_url(msg: &ChatMessage) -> Option<String> {
+    extract_first_url(&msg.text).or_else(|| msg.attachments.iter().find_map(|a| a.url.clone()))
+}
+
+fn extract_first_url(text: &str) -> Option<String> {
+    text.split_whitespace()
+        .find(|token| token.starts_with("http://") || token.starts_with("https://"))
+        .map(|s| {
+            s.trim_matches(|c: char| c.is_ascii_punctuation())
+                .to_string()
+        })
+}
+
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.chars().count() <= max_len {
+        s.to_string()
+    } else {
+        format!(
+            "{}...",
+            s.chars()
+                .take(max_len.saturating_sub(3))
+                .collect::<String>()
+        )
+    }
 }
