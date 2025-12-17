@@ -1,13 +1,13 @@
 use std::process::Command;
 use std::sync::Arc;
 
-use crate::commands::handle_command;
+use crate::commands::{determine_completion_state, handle_command};
 use crate::event::VkEvent;
 use crate::input::{delete_word, insert_char_at, remove_char_at};
 use crate::message::Message;
 use crate::state::{
-    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, DeliveryStatus, Focus,
-    ForwardStage, Mode, ReplyPreview, RunningState, Screen,
+    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, CompletionState,
+    DeliveryStatus, Focus, ForwardStage, Mode, ReplyPreview, RunningState, Screen,
 };
 use vk_api::VkClient;
 
@@ -256,24 +256,132 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         Message::CommandChar(c) => {
             insert_char_at(&mut app.command_input, app.command_cursor, c);
             app.command_cursor += 1;
+
+            // FSM state transition based on new input
+            app.completion_state = determine_completion_state(&app.command_input);
         }
         Message::CommandBackspace => {
             if app.command_cursor > 0 {
                 app.command_cursor -= 1;
                 remove_char_at(&mut app.command_input, app.command_cursor);
+
+                // FSM state transition based on new input
+                app.completion_state = determine_completion_state(&app.command_input);
             }
         }
         Message::CommandDeleteWord => {
             delete_word(&mut app.command_input, &mut app.command_cursor);
         }
         Message::CommandSubmit => {
-            let cmd = app.command_input.clone();
-            if let Some(res) = handle_command(app, &cmd) {
-                return Some(res);
+            // FSM state transition on submit (Tab key behavior)
+            match std::mem::take(&mut app.completion_state) {
+                CompletionState::Commands { suggestions, selected } => {
+                    // Stage 1: Select command from suggestions and add space
+                    let selected_cmd = &suggestions[selected];
+                    // Keep the leading ':' if present
+                    let prefix = if app.command_input.starts_with(':') { ":" } else { "" };
+                    app.command_input = format!("{}{} ", prefix, selected_cmd.command);
+                    app.command_cursor = app.command_input.len();
+
+                    // Re-evaluate completion state for next stage
+                    app.completion_state = determine_completion_state(&app.command_input);
+                    return None;
+                }
+                CompletionState::Subcommands { command, options, selected } => {
+                    // Stage 2: Select subcommand and add space
+                    let selected_opt = &options[selected];
+                    // Keep the leading ':' if present
+                    let prefix = if app.command_input.starts_with(':') { ":" } else { "" };
+                    app.command_input = format!("{}{} {} ", prefix, command, selected_opt.name);
+                    app.command_cursor = app.command_input.len();
+
+                    // Re-evaluate completion state for next stage
+                    app.completion_state = determine_completion_state(&app.command_input);
+                    return None;
+                }
+                CompletionState::FilePaths { entries, selected, .. } => {
+                    // Stage 3: Select file/directory
+                    let entry = &entries[selected];
+
+                    // Extract command part before the path
+                    let parts: Vec<_> = app.command_input.split_whitespace().collect();
+                    let cmd_part = if parts.len() > 2 {
+                        parts[..parts.len() - 1].join(" ")
+                    } else {
+                        app.command_input.trim().to_string()
+                    };
+
+                    if entry.is_dir {
+                        // Directory: insert with trailing slash for further completion
+                        app.command_input = format!("{} {}/", cmd_part, entry.full_path);
+                        app.command_cursor = app.command_input.len();
+
+                        // Re-evaluate completion state to show directory contents
+                        app.completion_state = determine_completion_state(&app.command_input);
+                    } else {
+                        // File: insert with space and close completion
+                        app.command_input = format!("{} {} ", cmd_part, entry.full_path);
+                        app.command_cursor = app.command_input.len();
+                        app.completion_state = CompletionState::Inactive;
+                    }
+                    return None;
+                }
+                CompletionState::Inactive => {
+                    // No completion active - execute the command
+                    let cmd = app.command_input.clone();
+                    if let Some(res) = handle_command(app, &cmd) {
+                        return Some(res);
+                    }
+                    app.command_input.clear();
+                    app.command_cursor = 0;
+                    app.mode = Mode::Normal;
+                }
             }
-            app.command_input.clear();
-            app.command_cursor = 0;
-            app.mode = Mode::Normal;
+        }
+        Message::CompletionUp => {
+            // FSM state navigation
+            match &mut app.completion_state {
+                CompletionState::Commands { selected, suggestions } => {
+                    if *selected > 0 {
+                        *selected -= 1;
+                    }
+                }
+                CompletionState::Subcommands { selected, options, .. } => {
+                    if *selected > 0 {
+                        *selected -= 1;
+                    }
+                }
+                CompletionState::FilePaths { selected, entries, .. } => {
+                    if *selected > 0 {
+                        *selected -= 1;
+                    }
+                }
+                CompletionState::Inactive => {}
+            }
+        }
+        Message::CompletionDown => {
+            // FSM state navigation
+            match &mut app.completion_state {
+                CompletionState::Commands { selected, suggestions } => {
+                    if *selected + 1 < suggestions.len() {
+                        *selected += 1;
+                    }
+                }
+                CompletionState::Subcommands { selected, options, .. } => {
+                    if *selected + 1 < options.len() {
+                        *selected += 1;
+                    }
+                }
+                CompletionState::FilePaths { selected, entries, .. } => {
+                    if *selected + 1 < entries.len() {
+                        *selected += 1;
+                    }
+                }
+                CompletionState::Inactive => {}
+            }
+        }
+        Message::CompletionSelect => {
+            // Same as Enter - handled by CommandSubmit
         }
 
         // Mode switches
@@ -284,6 +392,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
             app.command_input.clear();
             app.command_cursor = 0;
+            app.completion_state = CompletionState::Inactive; // FSM reset
             app.status = Some("Normal mode".into());
         }
         Message::EnterInsertMode => {
@@ -296,6 +405,10 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             app.focus = Focus::Input;
             app.command_input.clear();
             app.command_cursor = 0;
+
+            // FSM initial state - show all commands
+            app.completion_state = determine_completion_state("");
+
             app.status = Some("Command mode".into());
         }
 

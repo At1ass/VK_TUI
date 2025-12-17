@@ -29,6 +29,13 @@ pub fn view(app: &App, frame: &mut Frame) {
     if app.show_help {
         render_help_popup(app, frame);
     }
+
+    // Render command completion popup on top if visible
+    if !matches!(app.completion_state, crate::state::CompletionState::Inactive)
+        && app.mode == Mode::Command
+    {
+        render_command_completion(app, frame);
+    }
 }
 
 /// Render authentication screen
@@ -811,4 +818,263 @@ fn render_help_popup(app: &App, frame: &mut Frame) {
         .scroll((0, 0));
 
     frame.render_widget(paragraph, inner);
+}
+
+/// Render command completion popup
+fn render_command_completion(app: &App, frame: &mut Frame) {
+    use crate::state::CompletionState;
+
+    // FSM pattern matching on state
+    match &app.completion_state {
+        CompletionState::Inactive => return,
+        CompletionState::Commands { suggestions, selected } => {
+            render_command_suggestions(suggestions, *selected, frame);
+        }
+        CompletionState::Subcommands { options, selected, .. } => {
+            render_subcommand_suggestions(options, *selected, frame);
+        }
+        CompletionState::FilePaths { entries, selected, .. } => {
+            render_filepath_suggestions(entries, *selected, frame);
+        }
+    }
+}
+
+/// Render command suggestions list
+fn render_command_suggestions(
+    suggestions: &[crate::state::CommandSuggestion],
+    selected: usize,
+    frame: &mut Frame,
+) {
+    let area = frame.area();
+
+    // Calculate popup size
+    let max_cmd_len = suggestions
+        .iter()
+        .map(|s| s.command.len())
+        .max()
+        .unwrap_or(10);
+    let max_desc_len = suggestions
+        .iter()
+        .map(|s| s.description.len())
+        .max()
+        .unwrap_or(20);
+
+    // Width: command + " - " + description + borders + padding
+    let width = (max_cmd_len + 3 + max_desc_len + 4).min(80) as u16;
+
+    // Height: each suggestion takes 2 lines (command + usage), plus borders
+    let content_lines = suggestions.len() as u16 * 2; // 2 lines per item
+    let height = (content_lines + 2).min(24); // +2 for borders, max 24 lines
+
+    // Position: bottom-left, above status line
+    let popup_area = Rect {
+        x: area.x + 2,
+        y: area.height.saturating_sub(height + 2), // Leave space for status line
+        width,
+        height,
+    };
+
+    // Clear background
+    frame.render_widget(Clear, popup_area);
+
+    // Build list items
+    let items: Vec<ListItem> = suggestions
+        .iter()
+        .map(|sug| {
+            let spans = vec![
+                Span::styled(
+                    &sug.command,
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" - "),
+                Span::styled(&sug.description, Style::default().fg(Color::White)),
+            ];
+
+            // Add usage hint if available (on second line)
+            let mut lines = vec![Line::from(spans)];
+            if let Some(usage) = &sug.usage {
+                lines.push(Line::from(vec![Span::styled(
+                    format!("  {}", usage),
+                    Style::default().fg(Color::DarkGray),
+                )]));
+            }
+
+            ListItem::new(lines)
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(" Commands (Tab/↓↑ to navigate, Enter to select, Esc to cancel) ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+
+    let mut state = ListState::default();
+    state.select(Some(selected));
+
+    frame.render_stateful_widget(list, popup_area, &mut state);
+}
+
+/// Render subcommand suggestions list
+fn render_subcommand_suggestions(
+    options: &[crate::state::SubcommandOption],
+    selected: usize,
+    frame: &mut Frame,
+) {
+    let area = frame.area();
+
+    // Calculate popup size
+    let max_name_len = options
+        .iter()
+        .map(|o| o.name.len())
+        .max()
+        .unwrap_or(10);
+    let max_desc_len = options
+        .iter()
+        .map(|o| o.description.len())
+        .max()
+        .unwrap_or(20);
+
+    // Width: name + " - " + description + borders + padding
+    let width = (max_name_len + 3 + max_desc_len + 4).min(80) as u16;
+
+    // Height: one line per option + borders
+    let height = (options.len() as u16 + 2).min(12);
+
+    // Position: bottom-left, above status line
+    let popup_area = Rect {
+        x: area.x + 2,
+        y: area.height.saturating_sub(height + 2),
+        width,
+        height,
+    };
+
+    // Clear background
+    frame.render_widget(Clear, popup_area);
+
+    // Build list items
+    let items: Vec<ListItem> = options
+        .iter()
+        .map(|opt| {
+            let spans = vec![
+                Span::styled(
+                    &opt.name,
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" - "),
+                Span::styled(&opt.description, Style::default().fg(Color::White)),
+            ];
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(" Options (Tab/↓↑ to navigate, Enter to select, Esc to cancel) ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+
+    let mut state = ListState::default();
+    state.select(Some(selected));
+
+    frame.render_stateful_widget(list, popup_area, &mut state);
+}
+
+/// Render file path suggestions list
+fn render_filepath_suggestions(
+    entries: &[crate::state::PathEntry],
+    selected: usize,
+    frame: &mut Frame,
+) {
+    let area = frame.area();
+
+    // Calculate popup size
+    let max_name_len = entries
+        .iter()
+        .map(|e| e.name.len() + if e.is_dir { 1 } else { 0 }) // +1 for '/' on dirs
+        .max()
+        .unwrap_or(20);
+
+    // Width: name + padding + borders
+    let width = (max_name_len + 6).min(60) as u16;
+
+    // Height: limit to reasonable number
+    let height = ((entries.len() as u16).min(15) + 2); // +2 for borders
+
+    // Position: bottom-left, above status line
+    let popup_area = Rect {
+        x: area.x + 2,
+        y: area.height.saturating_sub(height + 2),
+        width,
+        height,
+    };
+
+    // Clear background
+    frame.render_widget(Clear, popup_area);
+
+    // Build list items
+    let items: Vec<ListItem> = entries
+        .iter()
+        .map(|entry| {
+            let (icon, color) = if entry.is_dir {
+                ("📁 ", Color::Blue)
+            } else {
+                ("📄 ", Color::White)
+            };
+
+            let display_name = if entry.is_dir {
+                format!("{}/", entry.name)
+            } else {
+                entry.name.clone()
+            };
+
+            let spans = vec![
+                Span::raw(icon),
+                Span::styled(display_name, Style::default().fg(color)),
+            ];
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(" Files (Tab/↓↑ to navigate, Enter to select, Esc to cancel) ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+
+    let mut state = ListState::default();
+    state.select(Some(selected));
+
+    frame.render_stateful_widget(list, popup_area, &mut state);
 }

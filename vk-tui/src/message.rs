@@ -50,6 +50,12 @@ pub enum Message {
     CommandDeleteWord,
     /// Execute command
     CommandSubmit,
+    /// Navigate up in command completion
+    CompletionUp,
+    /// Navigate down in command completion
+    CompletionDown,
+    /// Select item from completion
+    CompletionSelect,
 
     // Mode transitions
     /// Enter Normal mode
@@ -370,8 +376,14 @@ impl Message {
             // Exit Command mode
             KeyCode::Esc => Message::EnterNormalMode,
 
-            // Execute command
+            // Execute command or select from completion
             KeyCode::Enter => Message::CommandSubmit,
+
+            // Completion navigation
+            KeyCode::Tab => Message::CompletionDown,
+            KeyCode::BackTab => Message::CompletionUp,
+            KeyCode::Down => Message::CompletionDown,
+            KeyCode::Up => Message::CompletionUp,
 
             // Editing
             KeyCode::Backspace => Message::CommandBackspace,

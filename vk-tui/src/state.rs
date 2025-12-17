@@ -195,6 +195,7 @@ pub struct App {
     pub editing_message: Option<usize>,
     pub show_help: bool,
     pub forward_view: Option<ForwardView>,
+    pub completion_state: CompletionState,
 
     // Async action sender
     pub action_tx: Option<mpsc::UnboundedSender<AsyncAction>>,
@@ -228,6 +229,7 @@ impl Default for App {
             editing_message: None,
             show_help: false,
             forward_view: None,
+            completion_state: CompletionState::default(),
             forward: None,
             action_tx: None,
         }
@@ -254,4 +256,64 @@ pub struct ForwardState {
 pub struct ForwardView {
     pub items: Vec<ForwardItem>,
     pub selected: usize,
+}
+
+/// Command completion suggestion
+#[derive(Debug, Clone)]
+pub struct CommandSuggestion {
+    pub command: String,
+    pub description: String,
+    pub usage: Option<String>,
+}
+
+/// Subcommand option (e.g., "photo" or "doc" for :attach)
+#[derive(Debug, Clone)]
+pub struct SubcommandOption {
+    pub name: String,
+    pub description: String,
+}
+
+/// File system entry for path completion
+#[derive(Debug, Clone)]
+pub struct PathEntry {
+    pub name: String,        // "file.jpg"
+    pub full_path: String,   // "/home/user/file.jpg"
+    pub is_dir: bool,
+}
+
+/// Completion state machine
+#[derive(Debug, Clone)]
+pub enum CompletionState {
+    /// No completion active
+    Inactive,
+
+    /// Completing command names
+    /// Example: ":att|ach"
+    Commands {
+        suggestions: Vec<CommandSuggestion>,
+        selected: usize,
+    },
+
+    /// Completing subcommands
+    /// Example: ":attach |photo"
+    Subcommands {
+        command: String,
+        options: Vec<SubcommandOption>,
+        selected: usize,
+    },
+
+    /// Completing file paths
+    /// Example: ":attach photo |/home/user/file.jpg"
+    FilePaths {
+        context: String,         // "attach photo"
+        base_path: String,       // "/home/user"
+        entries: Vec<PathEntry>,
+        selected: usize,
+    },
+}
+
+impl Default for CompletionState {
+    fn default() -> Self {
+        Self::Inactive
+    }
 }
