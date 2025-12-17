@@ -797,23 +797,11 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 VkEvent::MessageEditedFromLongPoll {
                     peer_id,
                     message_id,
-                    text,
                 } => {
-                    // Update message text in current chat
+                    // Fetch fresh data from API to reflect authoritative text/cmid
                     if app.current_peer_id == Some(peer_id) {
-                        if let Some(msg) = app.messages.iter_mut().find(|m| m.id == message_id) {
-                            msg.text = text.clone();
-                            msg.is_edited = true;
-                            app.status = Some("Message updated from web".into());
-                        }
-                    }
-                    // Update last message in chat list if it was the last one
-                    if let Some(chat) = app.chats.iter_mut().find(|c| c.id == peer_id) {
-                        // We don't have enough info to know if this was the last message,
-                        // but we can update if text matches
-                        if chat.last_message.contains(&text) || text.contains(&chat.last_message) {
-                            chat.last_message = text;
-                        }
+                        app.send_action(AsyncAction::FetchMessageById(message_id));
+                        app.status = Some("Message updated from web".into());
                     }
                 }
                 VkEvent::MessageDeletedFromLongPoll {
@@ -900,6 +888,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 msg.delivery = DeliveryStatus::Sent;
                 msg.is_edited = true;
             }
+            // Refresh message from API to get authoritative text / cmid
+            app.send_action(AsyncAction::FetchMessageById(msg_id));
         }
 
         Message::MessageDeleted(msg_id) => {
@@ -914,10 +904,23 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
         }
 
-        Message::MessageDetailsFetched(msg_id, cmid) => {
-            // Update cmid for the message
-            if let Some(msg) = app.messages.iter_mut().find(|m| m.id == msg_id) {
-                msg.cmid = cmid;
+        Message::MessageDetailsFetched {
+            message_id,
+            cmid,
+            text,
+            is_edited,
+        } => {
+            // Update details for the message
+            if let Some(msg) = app.messages.iter_mut().find(|m| m.id == message_id) {
+                if let Some(cmid) = cmid {
+                    msg.cmid = Some(cmid);
+                }
+                if let Some(text) = text {
+                    msg.text = text;
+                }
+                if is_edited {
+                    msg.is_edited = true;
+                }
             }
         }
 

@@ -108,8 +108,13 @@ pub enum Message {
     MessageEdited(i64),
     /// Message deleted successfully
     MessageDeleted(i64), // message_id
-    /// Message details fetched (update cmid)
-    MessageDetailsFetched(i64, Option<i64>), // message_id, cmid
+    /// Message details fetched (update cmid/text)
+    MessageDetailsFetched {
+        message_id: i64,
+        cmid: Option<i64>,
+        text: Option<String>,
+        is_edited: bool,
+    },
     /// Error occurred
     Error(String),
 }

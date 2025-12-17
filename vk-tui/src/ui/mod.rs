@@ -231,7 +231,7 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
         .messages
         .iter()
         .enumerate()
-        .map(|(idx, msg)| {
+        .map(|(_idx, msg)| {
             let name_style = if msg.is_outgoing {
                 Style::default().fg(Color::Green)
             } else {
@@ -263,10 +263,7 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
 
             // Add edited indicator
             if msg.is_edited {
-                first_line.push(Span::styled(
-                    " (e)",
-                    Style::default().fg(Color::Yellow),
-                ));
+                first_line.push(Span::styled(" (e)", Style::default().fg(Color::Yellow)));
             }
 
             // Add delivery status indicator

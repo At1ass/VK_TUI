@@ -33,16 +33,9 @@ pub enum VkEvent {
     /// Message read
     MessageRead { peer_id: i64, message_id: i64 },
     /// Message edited (from Long Poll)
-    MessageEditedFromLongPoll {
-        peer_id: i64,
-        message_id: i64,
-        text: String,
-    },
+    MessageEditedFromLongPoll { peer_id: i64, message_id: i64 },
     /// Message deleted (from Long Poll)
-    MessageDeletedFromLongPoll {
-        peer_id: i64,
-        message_id: i64,
-    },
+    MessageDeletedFromLongPoll { peer_id: i64, message_id: i64 },
     /// User typing
     UserTyping { peer_id: i64, user_id: i64 },
     /// Connection status changed

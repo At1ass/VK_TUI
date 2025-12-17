@@ -429,10 +429,12 @@ async fn fetch_message_by_id(
     match client.messages().get_by_id(&[msg_id]).await {
         Ok(messages) => {
             if let Some(msg) = messages.first() {
-                let _ = tx.send(Message::MessageDetailsFetched(
-                    msg.id,
-                    msg.conversation_message_id,
-                ));
+                let _ = tx.send(Message::MessageDetailsFetched {
+                    message_id: msg.id,
+                    cmid: msg.conversation_message_id,
+                    text: Some(msg.text.clone()),
+                    is_edited: msg.update_time.is_some(),
+                });
             }
         }
         Err(e) => {
@@ -614,25 +616,21 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                                     }
                                 }
                                 5 => {
-                                    // Message edited
-                                    // Format: [5, message_id, flags, peer_id, timestamp, new_text, extra]
+                                    // Message flags changed (used here to detect edits)
+                                    // Format: [5, message_id, flags, peer_id, timestamp, ...]
                                     if let (Some(message_id), Some(peer_id)) = (
                                         arr.get(1).and_then(|v| v.as_i64()),
                                         arr.get(3).and_then(|v| v.as_i64()),
                                     ) {
-                                        let text =
-                                            arr.get(5).and_then(|v| v.as_str()).unwrap_or("");
                                         tracing::info!(
-                                            "Message edited: {} in {}: {}",
+                                            "Message flags changed (possible edit): {} in {}",
                                             message_id,
-                                            peer_id,
-                                            text
+                                            peer_id
                                         );
                                         let _ = tx.send(Message::VkEvent(
                                             VkEvent::MessageEditedFromLongPoll {
                                                 peer_id,
                                                 message_id,
-                                                text: text.to_string(),
                                             },
                                         ));
                                     }
