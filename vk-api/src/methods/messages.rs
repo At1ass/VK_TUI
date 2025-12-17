@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::client::VkClient;
-use crate::types::upload::UploadDocResponse;
 use crate::types::*;
 use serde_json::Value;
 
@@ -255,18 +254,28 @@ impl<'a> MessagesApi<'a> {
         params.insert("random_id", generate_random_id().to_string());
 
         // Parse response as object with cmid and message_id
-        #[derive(Debug, serde::Deserialize)]
-        struct SendResponse {
-            cmid: i64,
-            message_id: i64,
+        // VK can return either an object with {message_id, cmid} or a plain integer (message_id)
+        let response: serde_json::Value = self.client.request("messages.send", params).await?;
+
+        if let Some(obj) = response.as_object() {
+            let message_id = obj
+                .get("message_id")
+                .and_then(|v| v.as_i64())
+                .context("messages.send response missing message_id")?;
+            let cmid = obj.get("cmid").and_then(|v| v.as_i64()).unwrap_or(0);
+
+            Ok(SentMessage {
+                message_id,
+                conversation_message_id: cmid,
+            })
+        } else if let Some(message_id) = response.as_i64() {
+            Ok(SentMessage {
+                message_id,
+                conversation_message_id: 0,
+            })
+        } else {
+            anyhow::bail!("Unexpected messages.send response shape: {}", response);
         }
-
-        let response: SendResponse = self.client.request("messages.send", params).await?;
-
-        Ok(SentMessage {
-            message_id: response.message_id,
-            conversation_message_id: response.cmid,
-        })
     }
 
     // ========== Edit/Delete ==========
@@ -275,7 +284,8 @@ impl<'a> MessagesApi<'a> {
     ///
     /// # Arguments
     /// * `peer_id` - Peer ID
-    /// * `conversation_message_id` - Conversation message ID (cmid)
+    /// * `message_id` - Global message ID
+    /// * `cmid` - Optional conversation message ID (for chats)
     /// * `message` - New message text
     ///
     /// # VK API
@@ -284,12 +294,16 @@ impl<'a> MessagesApi<'a> {
     pub async fn edit(
         &self,
         peer_id: i64,
-        conversation_message_id: i64,
+        message_id: i64,
+        cmid: Option<i64>,
         message: &str,
     ) -> Result<()> {
         let mut params = HashMap::new();
         params.insert("peer_id", peer_id.to_string());
-        params.insert("cmid", conversation_message_id.to_string());
+        params.insert("message_id", message_id.to_string());
+        if let Some(cmid) = cmid {
+            params.insert("cmid", cmid.to_string());
+        }
         params.insert("message", message.to_string());
 
         let _: i32 = self.client.request("messages.edit", params).await?;
@@ -620,7 +634,7 @@ impl<'a> MessagesApi<'a> {
             .context("Doc upload failed")?;
 
         let response_text = response.text().await?;
-        let upload_json: UploadDocResponse = serde_json::from_str(&response_text).map_err(|e| {
+        let upload_json: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
             anyhow::anyhow!(
                 "Failed to parse doc upload response: {}; body: {}",
                 e,
@@ -628,8 +642,12 @@ impl<'a> MessagesApi<'a> {
             )
         })?;
 
-        if let Some(err) = upload_json.error {
-            let descr = upload_json.error_descr.unwrap_or_default();
+        // VK may return {file}, or {error, error_descr}
+        if let Some(err) = upload_json.get("error").and_then(|v| v.as_str()) {
+            let descr = upload_json
+                .get("error_descr")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
             anyhow::bail!(
                 "Upload error from VK: {}{}",
                 err,
@@ -641,11 +659,17 @@ impl<'a> MessagesApi<'a> {
             );
         }
 
+        let file_id = upload_json
+            .get("file")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .context(format!(
+                "Upload response missing file id; body: {}",
+                response_text
+            ))?;
+
         // Save doc
         let mut save_params: HashMap<&str, String> = HashMap::new();
-        let file_id = upload_json
-            .file
-            .context("Upload response missing file id")?;
         save_params.insert("file", file_id);
 
         // Pass filename to docs.save so it is not "untitled"

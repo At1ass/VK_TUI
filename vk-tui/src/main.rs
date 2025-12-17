@@ -100,8 +100,8 @@ fn spawn_action_handler(
                 AsyncAction::DownloadAttachments(atts) => {
                     tokio::spawn(download_attachments(atts, tx));
                 }
-                AsyncAction::EditMessage(peer_id, cmid, text) => {
-                    tokio::spawn(edit_message(client, peer_id, cmid, text, tx));
+                AsyncAction::EditMessage(peer_id, message_id, cmid, text) => {
+                    tokio::spawn(edit_message(client, peer_id, message_id, cmid, text, tx));
                 }
                 AsyncAction::DeleteMessage(_peer_id, msg_id, delete_for_all) => {
                     tokio::spawn(delete_message(client, msg_id, delete_for_all, tx));
@@ -374,17 +374,18 @@ async fn send_doc_attachment(
 async fn edit_message(
     client: Arc<VkClient>,
     peer_id: i64,
-    cmid: i64,
+    message_id: i64,
+    cmid: Option<i64>,
     text: String,
     tx: mpsc::UnboundedSender<Message>,
 ) {
     match client
         .messages()
-        .edit(peer_id, cmid, &text)
+        .edit(peer_id, message_id, cmid, &text)
         .await
     {
         Ok(()) => {
-            let _ = tx.send(Message::MessageEdited(cmid));
+            let _ = tx.send(Message::MessageEdited(message_id));
         }
         Err(e) => {
             let _ = tx.send(Message::SendFailed(format!(
@@ -619,7 +620,8 @@ async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>
                                         arr.get(1).and_then(|v| v.as_i64()),
                                         arr.get(3).and_then(|v| v.as_i64()),
                                     ) {
-                                        let text = arr.get(5).and_then(|v| v.as_str()).unwrap_or("");
+                                        let text =
+                                            arr.get(5).and_then(|v| v.as_str()).unwrap_or("");
                                         tracing::info!(
                                             "Message edited: {} in {}: {}",
                                             message_id,

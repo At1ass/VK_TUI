@@ -170,9 +170,9 @@ pub enum AsyncAction {
     SendPhoto(i64, String), // peer_id, path
     SendDoc(i64, String),   // peer_id, path
     DownloadAttachments(Vec<AttachmentInfo>),
-    EditMessage(i64, i64, String),  // peer_id, cmid, text
-    DeleteMessage(i64, i64, bool),  // peer_id, message_id, delete_for_all
-    FetchMessageById(i64),          // message_id - to get cmid after sending
+    EditMessage(i64, i64, Option<i64>, String), // peer_id, message_id, cmid, text
+    DeleteMessage(i64, i64, bool),              // peer_id, message_id, delete_for_all
+    FetchMessageById(i64),                      // message_id - to get cmid after sending
 }
 
 /// Delivery state for messages
@@ -555,22 +555,14 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     {
                         // Editing existing message
                         if let Some(edit_idx) = app.editing_message {
-                            let cmid = if let Some(msg) = app.messages.get(edit_idx) {
+                            let (message_id, cmid) = if let Some(msg) = app.messages.get(edit_idx) {
                                 if msg.id == 0 {
                                     app.status =
                                         Some("Cannot edit message that is not sent yet".into());
                                     app.editing_message = None;
                                     return None;
                                 }
-                                match msg.cmid {
-                                    Some(cmid) => cmid,
-                                    None => {
-                                        app.status =
-                                            Some("Cannot edit: missing conversation message id".into());
-                                        app.editing_message = None;
-                                        return None;
-                                    }
-                                }
+                                (msg.id, msg.cmid)
                             } else {
                                 app.editing_message = None;
                                 return None;
@@ -586,10 +578,10 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                                 m.text = text.clone();
                             }
 
-                            app.status = Some(format!("Editing message {} in {}: {}", cmid, peer_id, text));
+                            app.status = Some("Editing...".into());
 
                             app.send_action(AsyncAction::EditMessage(
-                                peer_id, cmid, text,
+                                peer_id, message_id, cmid, text,
                             ));
                             return None;
                         }
@@ -833,7 +825,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                         if let Some(pos) = app.messages.iter().position(|m| m.id == message_id) {
                             app.messages.remove(pos);
                             // Adjust scroll position if needed
-                            if app.messages_scroll >= app.messages.len() && app.messages_scroll > 0 {
+                            if app.messages_scroll >= app.messages.len() && app.messages_scroll > 0
+                            {
                                 app.messages_scroll -= 1;
                             }
                             app.status = Some("Message deleted from web".into());
@@ -893,12 +886,17 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 msg.cmid = Some(cmid);
                 msg.delivery = DeliveryStatus::Sent;
             }
+
+            // If cmid is missing (can happen in some responses), fetch full message to fill it
+            if cmid == 0 {
+                app.send_action(AsyncAction::FetchMessageById(msg_id));
+            }
         }
 
-        Message::MessageEdited(cmid) => {
+        Message::MessageEdited(msg_id) => {
             app.status = Some("Message edited".into());
             app.editing_message = None;
-            if let Some(msg) = app.messages.iter_mut().find(|m| m.cmid == Some(cmid)) {
+            if let Some(msg) = app.messages.iter_mut().find(|m| m.id == msg_id) {
                 msg.delivery = DeliveryStatus::Sent;
                 msg.is_edited = true;
             }
