@@ -1,11 +1,12 @@
+mod actions;
 mod app;
 mod event;
+mod mapper;
 mod message;
 mod state;
 mod ui;
 
 use std::io;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,10 +22,7 @@ use tokio::sync::mpsc;
 use app::update;
 use event::{Event, VkEvent};
 use message::Message;
-use state::{
-    App, AsyncAction, AttachmentInfo, AttachmentKind, Chat, ChatMessage, DeliveryStatus,
-    ReplyPreview, Screen,
-};
+use state::{App, AsyncAction, Screen};
 use vk_api::{User, VkClient};
 
 /// Initialize terminal
@@ -79,13 +77,13 @@ fn spawn_action_handler(
 
             match action {
                 AsyncAction::LoadConversations => {
-                    tokio::spawn(load_conversations(client, tx));
+                    tokio::spawn(actions::load_conversations(client, tx));
                 }
                 AsyncAction::LoadMessages(peer_id) => {
-                    tokio::spawn(load_messages(client, peer_id, tx));
+                    tokio::spawn(actions::load_messages(client, peer_id, tx));
                 }
                 AsyncAction::SendMessage(peer_id, text) => {
-                    tokio::spawn(send_message(client, peer_id, text, tx));
+                    tokio::spawn(actions::send_message(client, peer_id, text, tx));
                 }
                 AsyncAction::StartLongPoll => {
                     tokio::spawn(run_long_poll(client, tx));
@@ -94,22 +92,24 @@ fn spawn_action_handler(
                     tokio::spawn(mark_as_read(client, peer_id, tx));
                 }
                 AsyncAction::SendPhoto(peer_id, path) => {
-                    tokio::spawn(send_photo_attachment(client, peer_id, path, tx));
+                    tokio::spawn(actions::send_photo_attachment(client, peer_id, path, tx));
                 }
                 AsyncAction::SendDoc(peer_id, path) => {
-                    tokio::spawn(send_doc_attachment(client, peer_id, path, tx));
+                    tokio::spawn(actions::send_doc_attachment(client, peer_id, path, tx));
                 }
                 AsyncAction::DownloadAttachments(atts) => {
-                    tokio::spawn(download_attachments(atts, tx));
+                    tokio::spawn(actions::download_attachments(atts, tx));
                 }
                 AsyncAction::EditMessage(peer_id, message_id, cmid, text) => {
-                    tokio::spawn(edit_message(client, peer_id, message_id, cmid, text, tx));
+                    tokio::spawn(actions::edit_message(
+                        client, peer_id, message_id, cmid, text, tx,
+                    ));
                 }
                 AsyncAction::DeleteMessage(_peer_id, msg_id, delete_for_all) => {
-                    tokio::spawn(delete_message(client, msg_id, delete_for_all, tx));
+                    tokio::spawn(actions::delete_message(client, msg_id, delete_for_all, tx));
                 }
                 AsyncAction::FetchMessageById(msg_id) => {
-                    tokio::spawn(fetch_message_by_id(client, msg_id, tx));
+                    tokio::spawn(actions::fetch_message_by_id(client, msg_id, tx));
                 }
             }
         }
@@ -117,35 +117,6 @@ fn spawn_action_handler(
 }
 
 /// Load conversations from VK API
-async fn load_conversations(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>) {
-    match client.messages().get_conversations(0, 50).await {
-        Ok(response) => {
-            let chats: Vec<Chat> = response
-                .items
-                .into_iter()
-                .map(|item| {
-                    let title = get_conversation_title(&item, &response.profiles);
-                    let is_online = get_user_online(&item.conversation.peer.id, &response.profiles);
-
-                    Chat {
-                        id: item.conversation.peer.id,
-                        title,
-                        last_message: item.last_message.text.clone(),
-                        last_message_time: item.last_message.date,
-                        unread_count: item.conversation.unread_count.unwrap_or(0),
-                        is_online,
-                    }
-                })
-                .collect();
-
-            let _ = tx.send(Message::ConversationsLoaded(chats, response.profiles));
-        }
-        Err(e) => {
-            let _ = tx.send(Message::Error(format!("Failed to load chats: {}", e)));
-        }
-    }
-}
-
 /// Get conversation title from peer info
 fn get_conversation_title(item: &vk_api::ConversationItem, profiles: &[User]) -> String {
     // For chat conversations, use chat_settings title
@@ -181,406 +152,9 @@ fn get_user_online(peer_id: &i64, profiles: &[User]) -> bool {
     }
 }
 
-fn get_name(profiles: &[User], user_id: i64) -> String {
-    profiles
-        .iter()
-        .find(|u| u.id == user_id)
-        .map(|u| u.full_name())
-        .unwrap_or_else(|| {
-            if user_id < 0 {
-                format!("Group {}", -user_id)
-            } else {
-                format!("User {}", user_id)
-            }
-        })
-}
-
-/// Map VK attachment to UI attachment info
-fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
-    match att.attachment_type.as_str() {
-        "photo" => {
-            let best = att
-                .photo
-                .as_ref()
-                .and_then(|p| {
-                    p.sizes
-                        .iter()
-                        .filter_map(|s| {
-                            s.url.as_ref().map(|url| {
-                                let score = s.width.unwrap_or(0) * s.height.unwrap_or(0);
-                                (url.clone(), score as u64)
-                            })
-                        })
-                        .max_by_key(|(_, score)| *score)
-                })
-                .map(|(url, _)| url);
-
-            AttachmentInfo {
-                kind: AttachmentKind::Photo,
-                title: "Photo".into(),
-                url: best,
-                size: None,
-                subtitle: None,
-            }
-        }
-        "doc" => {
-            let doc = att.doc.unwrap_or_default();
-            AttachmentInfo {
-                kind: AttachmentKind::Doc,
-                title: doc.title.unwrap_or_else(|| "Document".to_string()),
-                url: doc.url,
-                size: doc.size,
-                subtitle: doc.extension,
-            }
-        }
-        "link" => {
-            let link = att.other.get("link").and_then(|v| v.as_object());
-            let title = link
-                .and_then(|o| o.get("title"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("Link")
-                .to_string();
-            let url = link
-                .and_then(|o| o.get("url"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            AttachmentInfo {
-                kind: AttachmentKind::Link,
-                title,
-                url,
-                size: None,
-                subtitle: None,
-            }
-        }
-        "audio" => {
-            let audio = att.other.get("audio").and_then(|v| v.as_object());
-            let artist = audio
-                .and_then(|o| o.get("artist"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let title = audio
-                .and_then(|o| o.get("title"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("Audio");
-            let full_title = if artist.is_empty() {
-                title.to_string()
-            } else {
-                format!("{} — {}", artist, title)
-            };
-            AttachmentInfo {
-                kind: AttachmentKind::Audio,
-                title: full_title,
-                url: None,
-                size: None,
-                subtitle: None,
-            }
-        }
-        "sticker" => AttachmentInfo {
-            kind: AttachmentKind::Sticker,
-            title: "Sticker".into(),
-            url: att
-                .other
-                .get("sticker")
-                .and_then(|v| v.get("images"))
-                .and_then(|imgs| imgs.as_array())
-                .and_then(|arr| {
-                    arr.iter()
-                        .filter_map(|img| {
-                            img.get("url").and_then(|u| u.as_str()).map(|s| {
-                                let w = img.get("width").and_then(|v| v.as_u64()).unwrap_or(0);
-                                (s.to_string(), w)
-                            })
-                        })
-                        .max_by_key(|(_, w)| *w)
-                        .map(|(u, _)| u)
-                }),
-            size: None,
-            subtitle: None,
-        },
-        other => AttachmentInfo {
-            kind: AttachmentKind::Other(other.to_string()),
-            title: other.to_string(),
-            url: None,
-            size: None,
-            subtitle: None,
-        },
-    }
-}
+// mapping helpers moved to mapper.rs
 
 /// Load messages from VK API
-async fn load_messages(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedSender<Message>) {
-    match client.messages().get_history(peer_id, 0, 50).await {
-        Ok(response) => {
-            // Get out_read from conversation to determine which outgoing messages are read
-            let out_read = response
-                .conversations
-                .first()
-                .and_then(|c| c.out_read)
-                .unwrap_or(0);
-
-            // Messages come in reverse order (newest first), so reverse them
-            let messages: Vec<ChatMessage> = response
-                .items
-                .into_iter()
-                .rev()
-                .map(|msg| {
-                    let from_name = get_name(&response.profiles, msg.from_id);
-
-                    let is_outgoing = msg.is_outgoing();
-                    // For outgoing messages, check against out_read from conversation
-                    // For incoming messages, use read_state from message
-                    let is_read = if is_outgoing {
-                        msg.id <= out_read
-                    } else {
-                        msg.is_read()
-                    };
-                    let text = if msg.text.is_empty() {
-                        "[attachment]".to_string()
-                    } else {
-                        msg.text
-                    };
-                    let attachments = msg.attachments.into_iter().map(map_attachment).collect();
-                    let reply = msg.reply_message.as_ref().map(|r| ReplyPreview {
-                        from: get_name(&response.profiles, r.from_id),
-                        text: r.text.clone(),
-                    });
-                    let fwd_count = msg.fwd_messages.len();
-
-                    ChatMessage {
-                        id: msg.id,
-                        cmid: msg.conversation_message_id,
-                        from_id: msg.from_id,
-                        from_name,
-                        text,
-                        timestamp: msg.date,
-                        is_outgoing,
-                        is_read,
-                        is_edited: msg.update_time.is_some(),
-                        delivery: DeliveryStatus::Sent,
-                        attachments,
-                        reply,
-                        fwd_count,
-                    }
-                })
-                .collect();
-
-            let _ = tx.send(Message::MessagesLoaded(messages, response.profiles));
-        }
-        Err(e) => {
-            let _ = tx.send(Message::Error(format!("Failed to load messages: {}", e)));
-        }
-    }
-}
-
-/// Send message via VK API
-async fn send_message(
-    client: Arc<VkClient>,
-    peer_id: i64,
-    text: String,
-    tx: mpsc::UnboundedSender<Message>,
-) {
-    match client.messages().send(peer_id, &text).await {
-        Ok(sent) => {
-            let _ = tx.send(Message::MessageSent(
-                sent.message_id,
-                sent.conversation_message_id,
-            ));
-        }
-        Err(e) => {
-            let _ = tx.send(Message::SendFailed(format!(
-                "Failed to send message: {}",
-                e
-            )));
-        }
-    }
-}
-
-/// Send photo attachment via VK API
-async fn send_photo_attachment(
-    client: Arc<VkClient>,
-    peer_id: i64,
-    path: String,
-    tx: mpsc::UnboundedSender<Message>,
-) {
-    match client
-        .messages()
-        .send_photo(peer_id, Path::new(&path))
-        .await
-    {
-        Ok(sent) => {
-            let _ = tx.send(Message::MessageSent(
-                sent.message_id,
-                sent.conversation_message_id,
-            ));
-        }
-        Err(e) => {
-            let _ = tx.send(Message::SendFailed(format!("Failed to send photo: {}", e)));
-        }
-    }
-}
-
-/// Send document/file attachment via VK API
-async fn send_doc_attachment(
-    client: Arc<VkClient>,
-    peer_id: i64,
-    path: String,
-    tx: mpsc::UnboundedSender<Message>,
-) {
-    match client.messages().send_doc(peer_id, Path::new(&path)).await {
-        Ok(sent) => {
-            let _ = tx.send(Message::MessageSent(
-                sent.message_id,
-                sent.conversation_message_id,
-            ));
-        }
-        Err(e) => {
-            let _ = tx.send(Message::SendFailed(format!("Failed to send file: {}", e)));
-        }
-    }
-}
-
-/// Edit message via VK API
-async fn edit_message(
-    client: Arc<VkClient>,
-    peer_id: i64,
-    message_id: i64,
-    cmid: Option<i64>,
-    text: String,
-    tx: mpsc::UnboundedSender<Message>,
-) {
-    match client
-        .messages()
-        .edit(peer_id, message_id, cmid, &text)
-        .await
-    {
-        Ok(()) => {
-            let _ = tx.send(Message::MessageEdited(message_id));
-        }
-        Err(e) => {
-            let _ = tx.send(Message::SendFailed(format!(
-                "Failed to edit message: {}",
-                e
-            )));
-        }
-    }
-}
-
-/// Delete message via VK API
-async fn delete_message(
-    client: Arc<VkClient>,
-    message_id: i64,
-    delete_for_all: bool,
-    tx: mpsc::UnboundedSender<Message>,
-) {
-    match client
-        .messages()
-        .delete(&[message_id], delete_for_all)
-        .await
-    {
-        Ok(()) => {
-            let _ = tx.send(Message::MessageDeleted(message_id));
-        }
-        Err(e) => {
-            let _ = tx.send(Message::SendFailed(format!(
-                "Failed to delete message: {}",
-                e
-            )));
-        }
-    }
-}
-
-/// Fetch message by ID to get cmid
-async fn fetch_message_by_id(
-    client: Arc<VkClient>,
-    msg_id: i64,
-    tx: mpsc::UnboundedSender<Message>,
-) {
-    match client.messages().get_by_id(&[msg_id]).await {
-        Ok(messages) => {
-            if let Some(msg) = messages.first() {
-                // Map attachments/reply/fwd preview for UI
-                let attachments = msg
-                    .attachments
-                    .clone()
-                    .into_iter()
-                    .map(map_attachment)
-                    .collect::<Vec<_>>();
-                let reply = msg.reply_message.as_ref().map(|r| ReplyPreview {
-                    from: get_name(&[], r.from_id),
-                    text: r.text.clone(),
-                });
-                let fwd_count = msg.fwd_messages.len();
-
-                let _ = tx.send(Message::MessageDetailsFetched {
-                    message_id: msg.id,
-                    cmid: msg.conversation_message_id,
-                    text: Some(msg.text.clone()),
-                    is_edited: msg.update_time.is_some(),
-                    attachments: Some(attachments),
-                    reply,
-                    fwd_count: Some(fwd_count),
-                });
-            }
-        }
-        Err(e) => {
-            // Not critical, just log
-            tracing::warn!("Failed to fetch message details: {}", e);
-        }
-    }
-}
-
-/// Download attachments to user's downloads directory
-async fn download_attachments(atts: Vec<AttachmentInfo>, tx: mpsc::UnboundedSender<Message>) {
-    let Some(base_dir) = directories::UserDirs::new()
-        .and_then(|u| u.download_dir().map(|p| p.to_path_buf()))
-        .or_else(|| Some(std::env::temp_dir()))
-    else {
-        let _ = tx.send(Message::Error("No download directory available".into()));
-        return;
-    };
-
-    if std::fs::create_dir_all(&base_dir).is_err() {
-        let _ = tx.send(Message::Error("Failed to create download directory".into()));
-        return;
-    }
-
-    let client = reqwest::Client::new();
-
-    for (idx, att) in atts.into_iter().enumerate() {
-        let Some(url) = att.url.clone() else {
-            continue;
-        };
-
-        let name = if !att.title.is_empty() {
-            att.title.clone()
-        } else {
-            format!("attachment_{}", idx)
-        };
-
-        let path = base_dir.join(name);
-
-        match client.get(&url).send().await {
-            Ok(resp) => match resp.bytes().await {
-                Ok(bytes) => {
-                    if let Err(e) = std::fs::write(&path, &bytes) {
-                        let _ = tx.send(Message::Error(format!(
-                            "Failed to save {}: {}",
-                            path.display(),
-                            e
-                        )));
-                    }
-                }
-                Err(e) => {
-                    let _ = tx.send(Message::Error(format!("Download failed: {}", e)));
-                }
-            },
-            Err(e) => {
-                let _ = tx.send(Message::Error(format!("Download failed: {}", e)));
-            }
-        }
-    }
-}
-
 /// Run Long Poll loop for real-time updates
 async fn run_long_poll(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>) {
     tracing::info!("Starting Long Poll...");

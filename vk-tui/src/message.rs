@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::event::VkEvent;
-use crate::state::{Chat, ChatMessage, Focus, Mode};
+use crate::state::{AttachmentInfo, Chat, ChatMessage, Focus, Mode, ReplyPreview};
 use vk_api::User;
 
 /// Messages for the TEA update loop
@@ -321,4 +321,3 @@ impl Message {
         }
     }
 }
-use crate::{AttachmentInfo, ReplyPreview};
