@@ -882,10 +882,8 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 msg.delivery = DeliveryStatus::Sent;
             }
 
-            // If cmid is missing (can happen in some responses), fetch full message to fill it
-            if cmid == 0 {
-                app.send_action(AsyncAction::FetchMessageById(msg_id));
-            }
+            // Fetch full message to sync cmid/text/attachments
+            app.send_action(AsyncAction::FetchMessageById(msg_id));
         }
 
         Message::MessageEdited(msg_id) => {
@@ -916,6 +914,9 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             cmid,
             text,
             is_edited,
+            attachments,
+            reply,
+            fwd_count,
         } => {
             // Update details for the message
             if let Some(msg) = app.messages.iter_mut().find(|m| m.id == message_id) {
@@ -927,6 +928,15 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 }
                 if is_edited {
                     msg.is_edited = true;
+                }
+                if let Some(atts) = attachments {
+                    msg.attachments = atts;
+                }
+                if let Some(r) = reply {
+                    msg.reply = Some(r);
+                }
+                if let Some(fwd) = fwd_count {
+                    msg.fwd_count = fwd;
                 }
             }
         }

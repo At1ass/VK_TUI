@@ -496,11 +496,27 @@ async fn fetch_message_by_id(
     match client.messages().get_by_id(&[msg_id]).await {
         Ok(messages) => {
             if let Some(msg) = messages.first() {
+                // Map attachments/reply/fwd preview for UI
+                let attachments = msg
+                    .attachments
+                    .clone()
+                    .into_iter()
+                    .map(map_attachment)
+                    .collect::<Vec<_>>();
+                let reply = msg.reply_message.as_ref().map(|r| ReplyPreview {
+                    from: get_name(&[], r.from_id),
+                    text: r.text.clone(),
+                });
+                let fwd_count = msg.fwd_messages.len();
+
                 let _ = tx.send(Message::MessageDetailsFetched {
                     message_id: msg.id,
                     cmid: msg.conversation_message_id,
                     text: Some(msg.text.clone()),
                     is_edited: msg.update_time.is_some(),
+                    attachments: Some(attachments),
+                    reply,
+                    fwd_count: Some(fwd_count),
                 });
             }
         }

@@ -108,12 +108,15 @@ pub enum Message {
     MessageEdited(i64),
     /// Message deleted successfully
     MessageDeleted(i64), // message_id
-    /// Message details fetched (update cmid/text)
+    /// Message details fetched (update cmid/text/attachments)
     MessageDetailsFetched {
         message_id: i64,
         cmid: Option<i64>,
         text: Option<String>,
         is_edited: bool,
+        attachments: Option<Vec<AttachmentInfo>>,
+        reply: Option<ReplyPreview>,
+        fwd_count: Option<usize>,
     },
     /// Error occurred
     Error(String),
@@ -318,3 +321,4 @@ impl Message {
         }
     }
 }
+use crate::{AttachmentInfo, ReplyPreview};
