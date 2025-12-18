@@ -157,6 +157,16 @@ pub enum Message {
     },
     /// Error occurred
     Error(String),
+
+    // Chat filter
+    /// Start chat filter mode
+    StartChatFilter,
+    /// Input character in filter
+    FilterChar(char),
+    /// Delete character in filter (backspace)
+    FilterBackspace,
+    /// Clear/exit filter mode
+    ClearFilter,
 }
 
 impl Message {
@@ -304,7 +314,7 @@ impl Message {
 
             // Actions
             KeyCode::Char('l') | KeyCode::Enter => Message::Select,
-            KeyCode::Char('/') => Message::StartSearch,
+            KeyCode::Char('/') => Message::StartChatFilter,
 
             _ => Message::Noop,
         }

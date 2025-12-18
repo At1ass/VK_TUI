@@ -194,6 +194,24 @@ pub enum AsyncAction {
     FetchMessageById(i64),                      // message_id - to get cmid after sending
 }
 
+/// Chat filter state for local fuzzy search
+#[derive(Debug, Clone)]
+pub struct ChatFilter {
+    pub query: String,
+    pub cursor: usize,
+    pub filtered_indices: Vec<usize>, // indices of matching chats
+}
+
+impl ChatFilter {
+    pub fn new() -> Self {
+        Self {
+            query: String::new(),
+            cursor: 0,
+            filtered_indices: Vec::new(),
+        }
+    }
+}
+
 /// Application state (Model in TEA)
 pub struct App {
     pub running_state: RunningState,
@@ -222,6 +240,9 @@ pub struct App {
     pub messages: Vec<ChatMessage>,
     pub messages_scroll: usize,
     pub reply_to: Option<(i64, ReplyPreview)>,
+
+    // Search and filter state
+    pub chat_filter: Option<ChatFilter>,
 
     // Pagination state
     pub chats_pagination: ChatsPagination,
@@ -266,6 +287,7 @@ impl Default for App {
             messages: Vec::new(),
             messages_scroll: 0,
             reply_to: None,
+            chat_filter: None,
             chats_pagination: ChatsPagination::default(),
             messages_pagination: None,
             input: String::new(),

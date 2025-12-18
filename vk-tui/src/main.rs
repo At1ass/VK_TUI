@@ -6,6 +6,7 @@ mod input;
 mod longpoll;
 mod mapper;
 mod message;
+mod search;
 mod state;
 mod ui;
 mod update;
@@ -304,8 +305,20 @@ async fn main() -> Result<()> {
                         // Periodic updates
                     }
                     Event::Key(key) => {
-                        // Auth screen uses dedicated input handling; main screen uses modes
-                        let msg = if app.screen == Screen::Auth {
+                        use crossterm::event::{KeyCode, KeyModifiers};
+
+                        // Check if chat filter is active and handle its input
+                        let msg = if app.chat_filter.is_some() {
+                            match key.code {
+                                KeyCode::Esc => Message::ClearFilter,
+                                KeyCode::Backspace => Message::FilterBackspace,
+                                KeyCode::Char(c) => Message::FilterChar(c),
+                                KeyCode::Up => Message::NavigateUp,
+                                KeyCode::Down => Message::NavigateDown,
+                                KeyCode::Enter => Message::Select,
+                                _ => Message::Noop,
+                            }
+                        } else if app.screen == Screen::Auth {
                             Message::from_auth_key_event(key)
                         } else if let Some(fwd) = &app.forward {
                             Message::from_forward_key_event(key, fwd.stage.clone())

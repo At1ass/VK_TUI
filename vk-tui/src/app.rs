@@ -46,7 +46,15 @@ impl App {
 
     /// Get current chat peer_id
     pub fn current_chat(&self) -> Option<&Chat> {
-        self.chats.get(self.selected_chat)
+        if let Some(filter) = &self.chat_filter {
+            // Get the actual chat index from filtered indices
+            filter
+                .filtered_indices
+                .get(self.selected_chat)
+                .and_then(|&idx| self.chats.get(idx))
+        } else {
+            self.chats.get(self.selected_chat)
+        }
     }
 
     /// Get user name by id

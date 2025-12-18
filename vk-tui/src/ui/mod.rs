@@ -1,6 +1,7 @@
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
+    prelude::Position,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
@@ -150,8 +151,18 @@ fn render_main_screen(app: &App, frame: &mut Frame) {
 fn render_chat_list(app: &App, frame: &mut Frame, area: Rect) {
     let is_focused = app.focus == Focus::ChatList;
 
-    let items: Vec<ListItem> = app
-        .chats
+    // Determine which chats to show (filtered or all)
+    let visible_chats: Vec<&crate::state::Chat> = if let Some(filter) = &app.chat_filter {
+        filter
+            .filtered_indices
+            .iter()
+            .filter_map(|&idx| app.chats.get(idx))
+            .collect()
+    } else {
+        app.chats.iter().collect()
+    };
+
+    let items: Vec<ListItem> = visible_chats
         .iter()
         .map(|chat| {
             let unread = if chat.unread_count > 0 {
@@ -222,6 +233,34 @@ fn render_chat_list(app: &App, frame: &mut Frame, area: Rect) {
     state.select(Some(app.selected_chat));
 
     frame.render_stateful_widget(list, area, &mut state);
+
+    // Render filter input if active
+    if let Some(filter) = &app.chat_filter {
+        let filter_area = Rect {
+            x: area.x + 1,
+            y: area.y + area.height.saturating_sub(3),
+            width: area.width.saturating_sub(2),
+            height: 3,
+        };
+
+        let filter_text = format!("🔍 {}", filter.query);
+        let filter_widget = Paragraph::new(filter_text)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Yellow))
+                    .title(" Filter "),
+            )
+            .style(Style::default().fg(Color::White));
+
+        frame.render_widget(Clear, filter_area);
+        frame.render_widget(filter_widget, filter_area);
+
+        // Render cursor
+        let cursor_x = filter_area.x + 3 + filter.cursor as u16; // +3 for "🔍 "
+        let cursor_y = filter_area.y + 1;
+        frame.set_cursor_position(Position::new(cursor_x, cursor_y));
+    }
 }
 
 /// Render the chat area (messages + input)
@@ -395,7 +434,8 @@ fn render_messages(app: &App, frame: &mut Frame, area: Rect) {
     };
 
     let chat_title = app
-        .current_chat()
+        .current_peer_id
+        .and_then(|peer_id| app.chats.iter().find(|c| c.id == peer_id))
         .map(|c| c.title.as_str())
         .unwrap_or("Messages");
 

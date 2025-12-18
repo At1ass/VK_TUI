@@ -81,10 +81,17 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             if app.screen == Screen::Main {
                 match app.focus {
                     Focus::ChatList => {
-                        if app.selected_chat + 1 < app.chats.len() {
-                            app.selected_chat += 1;
+                        // Determine the visible chat count (filtered or all)
+                        let visible_count = if let Some(filter) = &app.chat_filter {
+                            filter.filtered_indices.len()
                         } else {
-                            // At the end of chat list - try to load more
+                            app.chats.len()
+                        };
+
+                        if app.selected_chat + 1 < visible_count {
+                            app.selected_chat += 1;
+                        } else if app.chat_filter.is_none() {
+                            // At the end of chat list (not filtered) - try to load more
                             if app.chats_pagination.has_more
                                 && !app.chats_pagination.is_loading
                             {
@@ -151,6 +158,9 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                 && let Some((peer_id, title)) =
                     app.current_chat().map(|chat| (chat.id, chat.title.clone()))
             {
+                // Clear chat filter if active
+                app.chat_filter = None;
+
                 app.current_peer_id = Some(peer_id);
                 app.messages.clear();
                 app.is_loading = true;
@@ -944,6 +954,56 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         }
         Message::ClosePopup => {
             app.show_help = false;
+        }
+
+        // Chat filter
+        Message::StartChatFilter => {
+            if app.screen == Screen::Main && app.focus == Focus::ChatList {
+                let mut filter = crate::state::ChatFilter::new();
+                // Initialize with all chats
+                filter.filtered_indices = crate::search::filter_chats(&app.chats, "");
+                app.chat_filter = Some(filter);
+                // Reset selection to first chat
+                app.selected_chat = 0;
+                app.status = Some("Filter: (type to search, Esc to cancel)".into());
+            }
+        }
+        Message::FilterChar(c) => {
+            if let Some(filter) = &mut app.chat_filter {
+                crate::input::insert_char_at(&mut filter.query, filter.cursor, c);
+                filter.cursor += 1;
+                // Update filtered indices
+                filter.filtered_indices = crate::search::filter_chats(&app.chats, &filter.query);
+                // Reset selection to first result
+                app.selected_chat = 0;
+                app.status = Some(format!(
+                    "Filter: {} ({} matches)",
+                    filter.query,
+                    filter.filtered_indices.len()
+                ));
+            }
+        }
+        Message::FilterBackspace => {
+            if let Some(filter) = &mut app.chat_filter {
+                if filter.cursor > 0 {
+                    filter.cursor -= 1;
+                    crate::input::remove_char_at(&mut filter.query, filter.cursor);
+                    // Update filtered indices
+                    filter.filtered_indices =
+                        crate::search::filter_chats(&app.chats, &filter.query);
+                    // Reset selection to first result
+                    app.selected_chat = 0;
+                    app.status = Some(format!(
+                        "Filter: {} ({} matches)",
+                        filter.query,
+                        filter.filtered_indices.len()
+                    ));
+                }
+            }
+        }
+        Message::ClearFilter => {
+            app.chat_filter = None;
+            app.status = None;
         }
     }
 
