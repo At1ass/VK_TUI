@@ -136,3 +136,19 @@ pub struct ConversationsResponse {
     #[serde(default)]
     pub groups: Vec<Group>,
 }
+
+/// Search messages response (extended)
+#[derive(Debug, Deserialize)]
+pub struct SearchResponse {
+    pub count: i32,
+    pub items: Vec<Message>,
+
+    #[serde(default)]
+    pub profiles: Vec<User>,
+
+    #[serde(default)]
+    pub groups: Vec<Group>,
+
+    #[serde(default)]
+    pub conversations: Vec<Conversation>,
+}

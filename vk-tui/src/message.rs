@@ -167,6 +167,27 @@ pub enum Message {
     FilterBackspace,
     /// Clear/exit filter mode
     ClearFilter,
+
+    // Global search
+    /// Start global search mode
+    StartGlobalSearch,
+    /// Input character in global search
+    GlobalSearchChar(char),
+    /// Delete character in global search
+    GlobalSearchBackspace,
+    /// Clear/exit global search mode
+    ClearGlobalSearch,
+    /// Navigate up in search results
+    GlobalSearchUp,
+    /// Navigate down in search results
+    GlobalSearchDown,
+    /// Select search result and navigate to message
+    GlobalSearchSelect,
+    /// Search results loaded
+    SearchResultsLoaded {
+        results: Vec<crate::state::SearchResult>,
+        total_count: i32,
+    },
 }
 
 impl Message {

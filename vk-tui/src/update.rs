@@ -855,6 +855,14 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             for user in profiles {
                 app.users.insert(user.id, user);
             }
+
+            // If we have a target message, scroll to it
+            if let Some(target_id) = app.target_message_id {
+                if let Some(pos) = app.messages.iter().position(|m| m.id == target_id) {
+                    app.messages_scroll = pos;
+                    app.target_message_id = None;
+                }
+            }
         }
         Message::MessageSent(msg_id, cmid) => {
             if let Some(msg) = app.messages.last_mut()
@@ -1004,6 +1012,98 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         Message::ClearFilter => {
             app.chat_filter = None;
             app.status = None;
+        }
+
+        // Global search
+        Message::StartGlobalSearch => {
+            let search = crate::state::GlobalSearch::new();
+            app.global_search = Some(search);
+            app.status = Some("Global search: (type to search, Esc to cancel)".into());
+        }
+        Message::GlobalSearchChar(c) => {
+            if let Some(search) = &mut app.global_search {
+                crate::input::insert_char_at(&mut search.query, search.cursor, c);
+                search.cursor += 1;
+                // Trigger search with debounce
+                search.is_loading = true;
+                let query = search.query.clone();
+                let status = format!("Searching: {}", search.query);
+                app.send_action(AsyncAction::SearchMessages(query));
+                app.status = Some(status);
+            }
+        }
+        Message::GlobalSearchBackspace => {
+            if let Some(search) = &mut app.global_search {
+                if search.cursor > 0 {
+                    search.cursor -= 1;
+                    crate::input::remove_char_at(&mut search.query, search.cursor);
+                    if search.query.is_empty() {
+                        search.results.clear();
+                        search.total_count = 0;
+                        search.selected = 0;
+                        app.status = Some("Global search: (type to search, Esc to cancel)".into());
+                    } else {
+                        search.is_loading = true;
+                        let query = search.query.clone();
+                        let status = format!("Searching: {}", search.query);
+                        app.send_action(AsyncAction::SearchMessages(query));
+                        app.status = Some(status);
+                    }
+                }
+            }
+        }
+        Message::ClearGlobalSearch => {
+            app.global_search = None;
+            app.status = None;
+        }
+        Message::GlobalSearchUp => {
+            if let Some(search) = &mut app.global_search {
+                search.selected = search.selected.saturating_sub(1);
+            }
+        }
+        Message::GlobalSearchDown => {
+            if let Some(search) = &mut app.global_search {
+                if search.selected + 1 < search.results.len() {
+                    search.selected += 1;
+                }
+            }
+        }
+        Message::GlobalSearchSelect => {
+            if let Some(search) = &app.global_search {
+                if let Some(result) = search.results.get(search.selected) {
+                    let peer_id = result.peer_id;
+                    let message_id = result.message_id;
+
+                    // Close search
+                    app.global_search = None;
+
+                    // Open chat and load messages around the found message
+                    app.current_peer_id = Some(peer_id);
+                    app.messages.clear();
+                    app.target_message_id = Some(message_id);
+                    app.is_loading = true;
+                    app.messages_pagination = Some(crate::state::MessagesPagination::new(peer_id));
+                    if let Some(pagination) = &mut app.messages_pagination {
+                        pagination.is_loading = true;
+                    }
+                    app.send_action(AsyncAction::LoadMessagesAround(peer_id, message_id));
+                    app.send_action(AsyncAction::MarkAsRead(peer_id));
+                    app.status = Some(format!("Loading chat..."));
+                    app.focus = Focus::Messages;
+                }
+            }
+        }
+        Message::SearchResultsLoaded { results, total_count } => {
+            if let Some(search) = &mut app.global_search {
+                search.results = results;
+                search.total_count = total_count;
+                search.selected = 0;
+                search.is_loading = false;
+                app.status = Some(format!(
+                    "Found {} results for '{}'",
+                    total_count, search.query
+                ));
+            }
         }
     }
 

@@ -180,6 +180,7 @@ impl Default for ChatsPagination {
 pub enum AsyncAction {
     LoadConversations(u32),             // offset
     LoadMessages(i64, u32),             // peer_id, offset
+    LoadMessagesAround(i64, i64),       // peer_id, message_id
     SendMessage(i64, String),           // peer_id, text
     SendForward(i64, Vec<i64>, String), // peer_id, message_ids, comment
     SendReply(i64, i64, String),        // peer_id, reply_to_msg_id, text
@@ -191,7 +192,8 @@ pub enum AsyncAction {
     EditMessage(i64, i64, Option<i64>, String), // peer_id, message_id, cmid, text
     #[allow(dead_code)]
     DeleteMessage(i64, i64, bool), // peer_id, message_id, delete_for_all
-    FetchMessageById(i64),                      // message_id - to get cmid after sending
+    FetchMessageById(i64),          // message_id - to get cmid after sending
+    SearchMessages(String),         // query
 }
 
 /// Chat filter state for local fuzzy search
@@ -208,6 +210,42 @@ impl ChatFilter {
             query: String::new(),
             cursor: 0,
             filtered_indices: Vec::new(),
+        }
+    }
+}
+
+/// Search result item
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    pub message_id: i64,
+    pub peer_id: i64,
+    pub from_id: i64,
+    pub from_name: String,
+    pub chat_title: String,
+    pub text: String,
+    pub timestamp: i64,
+}
+
+/// Global search state
+#[derive(Debug, Clone)]
+pub struct GlobalSearch {
+    pub query: String,
+    pub cursor: usize,
+    pub results: Vec<SearchResult>,
+    pub selected: usize,
+    pub is_loading: bool,
+    pub total_count: i32,
+}
+
+impl GlobalSearch {
+    pub fn new() -> Self {
+        Self {
+            query: String::new(),
+            cursor: 0,
+            results: Vec::new(),
+            selected: 0,
+            is_loading: false,
+            total_count: 0,
         }
     }
 }
@@ -239,10 +277,12 @@ pub struct App {
     pub current_peer_id: Option<i64>,
     pub messages: Vec<ChatMessage>,
     pub messages_scroll: usize,
+    pub target_message_id: Option<i64>, // Message to scroll to after loading
     pub reply_to: Option<(i64, ReplyPreview)>,
 
     // Search and filter state
     pub chat_filter: Option<ChatFilter>,
+    pub global_search: Option<GlobalSearch>,
 
     // Pagination state
     pub chats_pagination: ChatsPagination,
@@ -286,8 +326,10 @@ impl Default for App {
             current_peer_id: None,
             messages: Vec::new(),
             messages_scroll: 0,
+            target_message_id: None,
             reply_to: None,
             chat_filter: None,
+            global_search: None,
             chats_pagination: ChatsPagination::default(),
             messages_pagination: None,
             input: String::new(),

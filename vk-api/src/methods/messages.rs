@@ -127,6 +127,34 @@ impl<'a> MessagesApi<'a> {
         self.client.request("messages.getHistory", params).await
     }
 
+    /// Get message history around a specific message
+    ///
+    /// # Arguments
+    /// * `peer_id` - Peer ID
+    /// * `start_message_id` - Message ID to center the history around
+    /// * `count` - Number of messages (max: 200)
+    ///
+    /// # Returns
+    /// MessagesHistoryResponse with messages centered around start_message_id
+    ///
+    /// # VK API
+    /// Method: messages.getHistory with start_message_id
+    /// https://dev.vk.com/method/messages.getHistory
+    pub async fn get_history_around(
+        &self,
+        peer_id: i64,
+        start_message_id: i64,
+        count: u32,
+    ) -> Result<MessagesHistoryResponse> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        params.insert("start_message_id", start_message_id.to_string());
+        params.insert("count", count.to_string());
+        params.insert("extended", "1".to_string());
+
+        self.client.request("messages.getHistory", params).await
+    }
+
     /// Get message by conversation_message_id
     ///
     /// # VK API
@@ -381,22 +409,17 @@ impl<'a> MessagesApi<'a> {
         query: &str,
         peer_id: Option<i64>,
         count: u32,
-    ) -> Result<Vec<Message>> {
+    ) -> Result<SearchResponse> {
         let mut params = HashMap::new();
         params.insert("q", query.to_string());
         params.insert("count", count.to_string());
+        params.insert("extended", "1".to_string());
 
         if let Some(pid) = peer_id {
             params.insert("peer_id", pid.to_string());
         }
 
-        #[derive(Debug, serde::Deserialize)]
-        struct Response {
-            items: Vec<Message>,
-        }
-
-        let response: Response = self.client.request("messages.search", params).await?;
-        Ok(response.items)
+        self.client.request("messages.search", params).await
     }
 
     /// Search conversations

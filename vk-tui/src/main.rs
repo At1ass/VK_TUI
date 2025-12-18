@@ -88,6 +88,9 @@ fn spawn_action_handler(
                 AsyncAction::LoadMessages(peer_id, offset) => {
                     tokio::spawn(actions::load_messages(client, peer_id, offset, tx));
                 }
+                AsyncAction::LoadMessagesAround(peer_id, message_id) => {
+                    tokio::spawn(actions::load_messages_around(client, peer_id, message_id, tx));
+                }
                 AsyncAction::SendMessage(peer_id, text) => {
                     tokio::spawn(actions::send_message(client, peer_id, text, tx));
                 }
@@ -122,6 +125,9 @@ fn spawn_action_handler(
                 }
                 AsyncAction::FetchMessageById(msg_id) => {
                     tokio::spawn(actions::fetch_message_by_id(client, msg_id, tx));
+                }
+                AsyncAction::SearchMessages(query) => {
+                    tokio::spawn(actions::search_messages(client, query, tx));
                 }
             }
         }
@@ -307,8 +313,26 @@ async fn main() -> Result<()> {
                     Event::Key(key) => {
                         use crossterm::event::{KeyCode, KeyModifiers};
 
+                        // Check Ctrl+F for global search activation
+                        let msg = if key.code == KeyCode::Char('f') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                            if app.screen == Screen::Main {
+                                Message::StartGlobalSearch
+                            } else {
+                                Message::Noop
+                            }
+                        // Check if global search is active and handle its input
+                        } else if app.global_search.is_some() {
+                            match key.code {
+                                KeyCode::Esc => Message::ClearGlobalSearch,
+                                KeyCode::Backspace => Message::GlobalSearchBackspace,
+                                KeyCode::Char(c) => Message::GlobalSearchChar(c),
+                                KeyCode::Up => Message::GlobalSearchUp,
+                                KeyCode::Down => Message::GlobalSearchDown,
+                                KeyCode::Enter => Message::GlobalSearchSelect,
+                                _ => Message::Noop,
+                            }
                         // Check if chat filter is active and handle its input
-                        let msg = if app.chat_filter.is_some() {
+                        } else if app.chat_filter.is_some() {
                             match key.code {
                                 KeyCode::Esc => Message::ClearFilter,
                                 KeyCode::Backspace => Message::FilterBackspace,

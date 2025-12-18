@@ -37,6 +37,11 @@ pub fn view(app: &App, frame: &mut Frame) {
     {
         render_command_completion(app, frame);
     }
+
+    // Render global search popup on top if visible
+    if app.global_search.is_some() {
+        render_global_search_popup(app, frame);
+    }
 }
 
 /// Render authentication screen
@@ -1118,3 +1123,121 @@ fn render_filepath_suggestions(
 
     frame.render_stateful_widget(list, popup_area, &mut state);
 }
+/// Render global search popup
+fn render_global_search_popup(app: &App, frame: &mut Frame) {
+    let Some(search) = &app.global_search else {
+        return;
+    };
+
+    let area = frame.area();
+
+    // Create centered popup (80% width, 70% height)
+    let popup_width = (area.width * 80) / 100;
+    let popup_height = (area.height * 70) / 100;
+    let popup_x = (area.width - popup_width) / 2;
+    let popup_y = (area.height - popup_height) / 2;
+    let popup_area = Rect {
+        x: popup_x,
+        y: popup_y,
+        width: popup_width,
+        height: popup_height,
+    };
+
+    // Split popup into input and results
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Input field
+            Constraint::Min(1),    // Results list
+        ])
+        .split(popup_area);
+
+    // Render input field
+    let input_text = if search.is_loading {
+        format!("🔍 {} (searching...)", search.query)
+    } else {
+        format!(
+            "🔍 {} ({} results)",
+            search.query,
+            search.total_count
+        )
+    };
+
+    let input_widget = Paragraph::new(input_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title(" Global Search (Esc to cancel) "),
+        )
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(Clear, chunks[0]);
+    frame.render_widget(input_widget, chunks[0]);
+
+    // Render cursor in input field
+    let cursor_x = chunks[0].x + 3 + search.cursor as u16; // +3 for "🔍 "
+    let cursor_y = chunks[0].y + 1;
+    frame.set_cursor_position(Position::new(cursor_x, cursor_y));
+
+    // Render results list
+    let results: Vec<ListItem> = search
+        .results
+        .iter()
+        .map(|result| {
+            let timestamp = format_timestamp(result.timestamp);
+            let preview = if result.text.chars().count() > 60 {
+                let truncated: String = result.text.chars().take(60).collect();
+                format!("{}...", truncated)
+            } else {
+                result.text.clone()
+            };
+
+            let lines = vec![
+                Line::from(vec![
+                    Span::styled(
+                        &result.chat_title,
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" • "),
+                    Span::styled(&result.from_name, Style::default().fg(Color::Green)),
+                    Span::raw(" • "),
+                    Span::styled(timestamp, Style::default().fg(Color::DarkGray)),
+                ]),
+                Line::from(Span::styled(
+                    preview,
+                    Style::default().fg(Color::White),
+                )),
+            ];
+
+            ListItem::new(lines)
+        })
+        .collect();
+
+    let results_widget = List::new(results)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title(format!(
+                    " Results ({}/{}) ",
+                    search.selected + 1,
+                    search.results.len()
+                )),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(search.selected));
+
+    frame.render_widget(Clear, chunks[1]);
+    frame.render_stateful_widget(results_widget, chunks[1], &mut list_state);
+}
+

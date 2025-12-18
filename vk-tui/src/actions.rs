@@ -96,6 +96,54 @@ pub async fn load_messages(
     }
 }
 
+/// Load messages around a specific message
+pub async fn load_messages_around(
+    client: Arc<VkClient>,
+    peer_id: i64,
+    message_id: i64,
+    tx: mpsc::UnboundedSender<Message>,
+) {
+    const COUNT: u32 = 50;
+
+    match client
+        .messages()
+        .get_history_around(peer_id, message_id, COUNT)
+        .await
+    {
+        Ok(response) => {
+            let total_count = response.count as u32;
+            let has_more = true; // Always has more when loading around a message
+
+            let out_read = response
+                .conversations
+                .first()
+                .and_then(|c| c.out_read)
+                .unwrap_or(0);
+
+            let messages: Vec<crate::state::ChatMessage> = response
+                .items
+                .into_iter()
+                .rev()
+                .map(|msg| map_history_message(&response.profiles, &msg, out_read))
+                .collect();
+
+            let _ = tx.send(Message::MessagesLoaded {
+                peer_id,
+                messages,
+                profiles: response.profiles,
+                total_count,
+                has_more,
+            });
+        }
+        Err(e) => {
+            let _ = tx.send(Message::Error(format!(
+                "Failed to load messages around target: {}",
+                e
+            )));
+        }
+    }
+}
+
 pub async fn send_message(
     client: Arc<VkClient>,
     peer_id: i64,
@@ -346,6 +394,76 @@ pub async fn download_attachments(atts: Vec<AttachmentInfo>, tx: mpsc::Unbounded
             Err(e) => {
                 let _ = tx.send(Message::Error(format!("Download failed: {}", e)));
             }
+        }
+    }
+}
+
+/// Search messages globally
+pub async fn search_messages(
+    client: Arc<VkClient>,
+    query: String,
+    tx: mpsc::UnboundedSender<Message>,
+) {
+    match client.messages().search(&query, None, 20).await {
+        Ok(response) => {
+            let mut results = Vec::new();
+
+            // Create a map of conversations for quick lookup
+            let conversations: std::collections::HashMap<i64, &vk_api::Conversation> = response
+                .conversations
+                .iter()
+                .map(|conv| (conv.peer.id, conv))
+                .collect();
+
+            // Create a map of users for quick lookup
+            let users: std::collections::HashMap<i64, &vk_api::User> = response
+                .profiles
+                .iter()
+                .map(|user| (user.id, user))
+                .collect();
+
+            for msg in response.items {
+                let peer_id = msg.peer_id;
+                let from_id = msg.from_id;
+
+                // Get chat title
+                let chat_title = conversations
+                    .get(&peer_id)
+                    .and_then(|conv| {
+                        conv.chat_settings
+                            .as_ref()
+                            .map(|s| s.title.clone())
+                            .or_else(|| {
+                                // For DM, use user name
+                                users.get(&peer_id).map(|u| u.full_name())
+                            })
+                    })
+                    .unwrap_or_else(|| format!("Chat {}", peer_id));
+
+                // Get sender name
+                let from_name = users
+                    .get(&from_id)
+                    .map(|u| u.full_name())
+                    .unwrap_or_else(|| format!("User {}", from_id));
+
+                results.push(crate::state::SearchResult {
+                    message_id: msg.id,
+                    peer_id,
+                    from_id,
+                    from_name,
+                    chat_title,
+                    text: msg.text,
+                    timestamp: msg.date,
+                });
+            }
+
+            let _ = tx.send(Message::SearchResultsLoaded {
+                results,
+                total_count: response.count,
+            });
+        }
+        Err(e) => {
+            let _ = tx.send(Message::Error(format!("Search failed: {}", e)));
         }
     }
 }
