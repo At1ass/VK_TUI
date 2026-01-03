@@ -1,0 +1,23 @@
+[package]
+name = "vk-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Core business logic for VK client applications"
+
+[dependencies]
+# VK API library
+vk-api = { path = "../vk-api" }
+
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = "0.1"
+
+# Utils
+directories = "6"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

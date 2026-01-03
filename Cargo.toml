@@ -1,5 +1,5 @@
 [workspace]
-members = ["vk-api", "vk-tui"]
+members = ["vk-api", "vk-core", "vk-tui", "vk-gui", "vk-tauri"]
 resolver = "2"
 
 [workspace.package]
