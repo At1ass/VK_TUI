@@ -50,6 +50,20 @@ impl CommandExecutor {
                 self.load_messages_with_offset(peer_id, start_cmid, offset, count)
                     .await;
             }
+            AsyncCommand::LoadMessagesWithStartMessageId {
+                peer_id,
+                start_message_id,
+                offset,
+                count,
+            } => {
+                self.load_messages_with_start_message_id(
+                    peer_id,
+                    start_message_id,
+                    offset,
+                    count,
+                )
+                .await;
+            }
             AsyncCommand::SendMessage { peer_id, text } => {
                 self.send_message(peer_id, text).await;
             }
@@ -91,13 +105,16 @@ impl CommandExecutor {
             AsyncCommand::DownloadAttachments { attachments } => {
                 self.download_attachments(attachments).await;
             }
-            AsyncCommand::SearchMessages { query } => {
-                self.search_messages(query).await;
+            AsyncCommand::SearchMessages { query, peer_id } => {
+                self.search_messages(query, peer_id).await;
             }
             AsyncCommand::FetchMessageById { message_id } => {
                 self.fetch_message_by_id(message_id).await;
             }
-            AsyncCommand::StartLongPoll | AsyncCommand::MarkAsRead { .. } => {
+            AsyncCommand::MarkAsRead { peer_id } => {
+                self.mark_as_read(peer_id).await;
+            }
+            AsyncCommand::StartLongPoll => {
                 // Handled elsewhere or no-op for now
             }
         }
@@ -248,6 +265,51 @@ impl CommandExecutor {
             .client
             .messages()
             .get_history_with_offset(peer_id, start_cmid, offset, count)
+            .await
+        {
+            Ok(response) => {
+                let total_count = response.count as u32;
+                let loaded_count = response.items.len() as u32;
+                let has_more = loaded_count == count;
+
+                let out_read = response
+                    .conversations
+                    .first()
+                    .and_then(|c| c.out_read)
+                    .unwrap_or(0);
+
+                let messages = response
+                    .items
+                    .into_iter()
+                    .rev()
+                    .map(|msg| map_history_message(&response.profiles, &msg, out_read))
+                    .collect();
+
+                self.send_event(CoreEvent::MessagesLoaded {
+                    peer_id,
+                    messages,
+                    profiles: response.profiles,
+                    total_count,
+                    has_more,
+                });
+            }
+            Err(e) => {
+                self.send_event(CoreEvent::Error(format!("Failed to load messages: {}", e)));
+            }
+        }
+    }
+
+    async fn load_messages_with_start_message_id(
+        &self,
+        peer_id: i64,
+        start_message_id: i64,
+        offset: i32,
+        count: u32,
+    ) {
+        match self
+            .client
+            .messages()
+            .get_history_with_start_message_id(peer_id, start_message_id, offset, count)
             .await
         {
             Ok(response) => {
@@ -460,8 +522,8 @@ impl CommandExecutor {
         }
     }
 
-    async fn search_messages(&self, query: String) {
-        match self.client.messages().search(&query, None, 20).await {
+    async fn search_messages(&self, query: String, peer_id: Option<i64>) {
+        match self.client.messages().search(&query, peer_id, 20).await {
             Ok(response) => {
                 let mut results = Vec::new();
 
@@ -551,6 +613,12 @@ impl CommandExecutor {
             Err(e) => {
                 tracing::warn!("Failed to fetch message details: {}", e);
             }
+        }
+    }
+
+    async fn mark_as_read(&self, peer_id: i64) {
+        if let Err(e) = self.client.messages().mark_as_read(peer_id).await {
+            tracing::warn!("Failed to mark as read: {}", e);
         }
     }
 }

@@ -41,6 +41,14 @@ pub enum AsyncCommand {
         offset: i32,
         count: u32,
     },
+    /// Load messages with offset from a specific message id.
+    /// Used for pagination with start_message_id.
+    LoadMessagesWithStartMessageId {
+        peer_id: i64,
+        start_message_id: i64,
+        offset: i32,
+        count: u32,
+    },
 
     // === Messaging ===
     /// Send a text message.
@@ -87,7 +95,7 @@ pub enum AsyncCommand {
 
     // === Search ===
     /// Search messages globally.
-    SearchMessages { query: String },
+    SearchMessages { query: String, peer_id: Option<i64> },
 
     // === Other ===
     /// Start LongPoll listener.

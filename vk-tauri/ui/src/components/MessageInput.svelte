@@ -71,7 +71,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.5rem 1rem;
-    background: rgba(88, 170, 255, 0.1);
+    background: rgba(53, 132, 228, 0.15);
     border-bottom: 1px solid var(--cosmic-border);
   }
 
@@ -116,7 +116,7 @@
     padding: 0.75rem;
     background: var(--cosmic-surface-alt);
     border: 1px solid var(--cosmic-border);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     color: var(--cosmic-text);
     resize: none;
     min-height: 40px;
@@ -134,15 +134,14 @@
   .btn-send {
     padding: 0.75rem 1.5rem;
     background: var(--cosmic-accent);
-    color: var(--cosmic-bg);
-    border-radius: 8px;
+    color: #ffffff;
+    border-radius: var(--radius-m);
     font-weight: 600;
     transition: all 0.2s;
   }
 
   .btn-send:hover:not(:disabled) {
-    background: #6db9ff;
-    box-shadow: 0 2px 8px rgba(88, 170, 255, 0.3);
+    background: #2f76cf;
   }
 
   .btn-send:disabled {

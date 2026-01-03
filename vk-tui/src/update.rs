@@ -48,26 +48,37 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     Focus::Messages => {
                         // Check if we're at the top and can load more older messages
                         if app.messages_scroll == 0 {
-                            let should_load = app
+                            let (has_more, is_loading, first_cmid) = app
                                 .messages_pagination
                                 .as_ref()
-                                .map(|p| p.has_more && !p.is_loading)
-                                .unwrap_or(false);
+                                .map(|p| (p.has_more, p.is_loading, p.first_cmid))
+                                .unwrap_or((false, false, None));
 
-                            if should_load {
-                                let offset = app
-                                    .messages_pagination
-                                    .as_ref()
-                                    .map(|p| p.offset)
-                                    .unwrap_or(0);
+                            tracing::debug!(
+                                "NavigateUp: has_more={}, is_loading={}, first_cmid={:?}",
+                                has_more,
+                                is_loading,
+                                first_cmid
+                            );
 
-                                if let Some(peer_id) = app.current_peer_id {
-                                    if let Some(pagination) = &mut app.messages_pagination {
-                                        pagination.is_loading = true;
-                                    }
-                                    app.status = Some("Loading older messages...".into());
-                                    app.send_action(AsyncAction::LoadMessages(peer_id, offset));
+                            let should_load = has_more && !is_loading && first_cmid.is_some();
+
+                            if should_load && let Some(peer_id) = app.current_peer_id {
+                                let first_cmid = first_cmid.unwrap();
+
+                                if let Some(pagination) = &mut app.messages_pagination {
+                                    pagination.is_loading = true;
                                 }
+                                app.status = Some("Loading older messages...".into());
+                                tracing::debug!(
+                                    "Sending LoadMessagesWithOffset: peer_id={}, first_cmid={}, offset=-1, count=50",
+                                    peer_id,
+                                    first_cmid
+                                );
+                                // Use offset=-1 to skip first_cmid itself and load older messages
+                                app.send_action(AsyncAction::LoadMessagesWithOffset(
+                                    peer_id, first_cmid, -1, 50,
+                                ));
                             }
                         } else {
                             app.messages_scroll = app.messages_scroll.saturating_sub(1);
@@ -92,9 +103,7 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                             app.selected_chat += 1;
                         } else if app.chat_filter.is_none() {
                             // At the end of chat list (not filtered) - try to load more
-                            if app.chats_pagination.has_more
-                                && !app.chats_pagination.is_loading
-                            {
+                            if app.chats_pagination.has_more && !app.chats_pagination.is_loading {
                                 app.chats_pagination.is_loading = true;
                                 app.status = Some(format!(
                                     "Loading more chats ({}/{})",
@@ -111,7 +120,44 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                         }
                     }
                     Focus::Messages => {
-                        if app.messages_scroll + 1 < app.messages.len() {
+                        // Check if we're at the bottom and can load newer messages
+                        if app.messages_scroll + 1 >= app.messages.len() {
+                            // At the bottom - check if we can load newer messages
+                            let should_load = app
+                                .messages_pagination
+                                .as_ref()
+                                .map(|p| !p.is_loading)
+                                .unwrap_or(false);
+
+                            if should_load && let Some(peer_id) = app.current_peer_id {
+                                let last_cmid =
+                                    app.messages_pagination.as_ref().and_then(|p| p.last_cmid);
+
+                                if let Some(last_cmid) = last_cmid {
+                                    if let Some(pagination) = &mut app.messages_pagination {
+                                        pagination.is_loading = true;
+                                    }
+
+                                    const COUNT: u32 = 50;
+                                    const OFFSET: i32 = -49; // -(COUNT - 1) for overlap
+
+                                    app.status = Some("Loading newer messages...".into());
+                                    tracing::debug!(
+                                        "Sending LoadMessagesWithOffset: peer_id={}, last_cmid={}, offset={}, count={}",
+                                        peer_id,
+                                        last_cmid,
+                                        OFFSET,
+                                        COUNT
+                                    );
+
+                                    // Load with fixed offset=-49 and count=50 to get overlap + new messages
+                                    // Deduplication will filter out already loaded messages
+                                    app.send_action(AsyncAction::LoadMessagesWithOffset(
+                                        peer_id, last_cmid, OFFSET, COUNT,
+                                    ));
+                                }
+                            }
+                        } else {
                             app.messages_scroll += 1;
                         }
                     }
@@ -341,11 +387,18 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         Message::CommandSubmit => {
             // FSM state transition on submit (Tab key behavior)
             match std::mem::take(&mut app.completion_state) {
-                CompletionState::Commands { suggestions, selected } => {
+                CompletionState::Commands {
+                    suggestions,
+                    selected,
+                } => {
                     // Stage 1: Select command from suggestions and add space
                     let selected_cmd = &suggestions[selected];
                     // Keep the leading ':' if present
-                    let prefix = if app.command_input.starts_with(':') { ":" } else { "" };
+                    let prefix = if app.command_input.starts_with(':') {
+                        ":"
+                    } else {
+                        ""
+                    };
                     app.command_input = format!("{}{} ", prefix, selected_cmd.command);
                     app.command_cursor = app.command_input.len();
 
@@ -353,11 +406,19 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     app.completion_state = determine_completion_state(&app.command_input);
                     return None;
                 }
-                CompletionState::Subcommands { command, options, selected } => {
+                CompletionState::Subcommands {
+                    command,
+                    options,
+                    selected,
+                } => {
                     // Stage 2: Select subcommand and add space
                     let selected_opt = &options[selected];
                     // Keep the leading ':' if present
-                    let prefix = if app.command_input.starts_with(':') { ":" } else { "" };
+                    let prefix = if app.command_input.starts_with(':') {
+                        ":"
+                    } else {
+                        ""
+                    };
                     app.command_input = format!("{}{} {} ", prefix, command, selected_opt.name);
                     app.command_cursor = app.command_input.len();
 
@@ -365,7 +426,9 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     app.completion_state = determine_completion_state(&app.command_input);
                     return None;
                 }
-                CompletionState::FilePaths { entries, selected, .. } => {
+                CompletionState::FilePaths {
+                    entries, selected, ..
+                } => {
                     // Stage 3: Select file/directory
                     let entry = &entries[selected];
 
@@ -407,17 +470,28 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         Message::CompletionUp => {
             // FSM state navigation
             match &mut app.completion_state {
-                CompletionState::Commands { selected, suggestions } => {
+                CompletionState::Commands {
+                    selected,
+                    suggestions: _,
+                } => {
                     if *selected > 0 {
                         *selected -= 1;
                     }
                 }
-                CompletionState::Subcommands { selected, options, .. } => {
+                CompletionState::Subcommands {
+                    selected,
+                    options: _,
+                    ..
+                } => {
                     if *selected > 0 {
                         *selected -= 1;
                     }
                 }
-                CompletionState::FilePaths { selected, entries, .. } => {
+                CompletionState::FilePaths {
+                    selected,
+                    entries: _,
+                    ..
+                } => {
                     if *selected > 0 {
                         *selected -= 1;
                     }
@@ -428,17 +502,24 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         Message::CompletionDown => {
             // FSM state navigation
             match &mut app.completion_state {
-                CompletionState::Commands { selected, suggestions } => {
+                CompletionState::Commands {
+                    selected,
+                    suggestions,
+                } => {
                     if *selected + 1 < suggestions.len() {
                         *selected += 1;
                     }
                 }
-                CompletionState::Subcommands { selected, options, .. } => {
+                CompletionState::Subcommands {
+                    selected, options, ..
+                } => {
                     if *selected + 1 < options.len() {
                         *selected += 1;
                     }
                 }
-                CompletionState::FilePaths { selected, entries, .. } => {
+                CompletionState::FilePaths {
+                    selected, entries, ..
+                } => {
                     if *selected + 1 < entries.len() {
                         *selected += 1;
                     }
@@ -501,21 +582,22 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
 
         // Message actions
         Message::ReplyToMessage => {
-            if app.screen == Screen::Main && app.focus == Focus::Messages {
-                if let Some(msg) = app.current_message().cloned() {
-                    if msg.id == 0 {
-                        app.status = Some("Cannot reply to unsent message".into());
-                    } else {
-                        let preview = ReplyPreview {
-                            from: msg.from_name.clone(),
-                            text: truncate_str(&msg.text, 120),
-                            attachments: msg.attachments.clone(),
-                        };
-                        app.reply_to = Some((msg.id, preview));
-                        app.mode = Mode::Insert;
-                        app.focus = Focus::Input;
-                        app.status = Some(format!("Replying to {} (Esc to cancel)", msg.from_name));
-                    }
+            if app.screen == Screen::Main
+                && app.focus == Focus::Messages
+                && let Some(msg) = app.current_message().cloned()
+            {
+                if msg.id == 0 {
+                    app.status = Some("Cannot reply to unsent message".into());
+                } else {
+                    let preview = ReplyPreview {
+                        from: msg.from_name.clone(),
+                        text: truncate_str(&msg.text, 120),
+                        attachments: msg.attachments.clone(),
+                    };
+                    app.reply_to = Some((msg.id, preview));
+                    app.mode = Mode::Insert;
+                    app.focus = Focus::Input;
+                    app.status = Some(format!("Replying to {} (Esc to cancel)", msg.from_name));
                 }
             }
         }
@@ -633,17 +715,18 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             app.status = Some("Forward cancelled".into());
         }
         Message::ForwardMoveUp => {
-            if let Some(fwd) = app.forward.as_mut() {
-                if fwd.selected > 0 {
-                    fwd.selected -= 1;
-                }
+            if let Some(fwd) = app.forward.as_mut()
+                && fwd.selected > 0
+            {
+                fwd.selected -= 1;
             }
         }
         Message::ForwardMoveDown => {
-            if let Some(fwd) = app.forward.as_mut() {
-                if !fwd.filtered.is_empty() && fwd.selected + 1 < fwd.filtered.len() {
-                    fwd.selected += 1;
-                }
+            if let Some(fwd) = app.forward.as_mut()
+                && !fwd.filtered.is_empty()
+                && fwd.selected + 1 < fwd.filtered.len()
+            {
+                fwd.selected += 1;
             }
         }
         Message::ForwardQueryChar(c) => {
@@ -686,18 +769,16 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     ForwardStage::SelectTarget => {
                         if fwd.filtered.is_empty() {
                             app.status = Some("No chat matched".into());
-                        } else if let Some(chat) = fwd.filtered.get(fwd.selected) {
-                            if let Some(state) = app.forward.as_mut() {
-                                state.stage = ForwardStage::EnterComment {
-                                    peer_id: chat.id,
-                                    title: chat.title.clone(),
-                                };
-                                state.comment.clear();
-                                app.status = Some(format!(
-                                    "Forward to {}: add comment or Enter",
-                                    chat.title
-                                ));
-                            }
+                        } else if let Some(chat) = fwd.filtered.get(fwd.selected)
+                            && let Some(state) = app.forward.as_mut()
+                        {
+                            state.stage = ForwardStage::EnterComment {
+                                peer_id: chat.id,
+                                title: chat.title.clone(),
+                            };
+                            state.comment.clear();
+                            app.status =
+                                Some(format!("Forward to {}: add comment or Enter", chat.title));
                         }
                     }
                     ForwardStage::EnterComment { peer_id, .. } => {
@@ -767,6 +848,25 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
 
         // Messages from VK events and async actions
         Message::VkEvent(event) => return handle_vk_event(app, event),
+        Message::SessionValidated { valid, error } => {
+            if valid {
+                app.status = Some("Session validated".into());
+                app.is_loading = true;
+                app.chats_pagination.is_loading = true;
+                app.send_action(AsyncAction::LoadConversations(0));
+                app.send_action(AsyncAction::StartLongPoll);
+            } else if let Some(err) = error {
+                if is_auth_error(&err) {
+                    let _ = app.auth.logout();
+                    app.vk_client = None;
+                    app.screen = Screen::Auth;
+                    app.status = Some("Session expired. Please authorize again.".into());
+                } else {
+                    app.status = Some(err);
+                }
+                app.is_loading = false;
+            }
+        }
         Message::ConversationsLoaded {
             chats,
             profiles,
@@ -810,20 +910,57 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
         } => {
             app.is_loading = false;
 
-            // Append or replace messages based on offset
+            // Append or replace messages based on offset and overlap
             if let Some(pagination) = &app.messages_pagination {
-                if pagination.offset == 0 {
-                    // First load - replace
+                // Always check for overlap first if we have existing messages
+                if !app.messages.is_empty() {
+                    let existing_ids: std::collections::HashSet<i64> =
+                        app.messages.iter().map(|m| m.id).collect();
+                    let has_overlap = messages.iter().any(|m| existing_ids.contains(&m.id));
+
+                    if has_overlap {
+                        // There's overlap - determine if we're loading newer or older messages
+                        // by comparing message IDs
+                        let max_existing_id = app.messages.iter().map(|m| m.id).max().unwrap_or(0);
+                        let max_new_id = messages.iter().map(|m| m.id).max().unwrap_or(0);
+
+                        if max_new_id > max_existing_id {
+                            // Loading newer messages - append only new ones
+                            let current_last_scroll = app.messages_scroll;
+                            for msg in messages {
+                                if !existing_ids.contains(&msg.id) {
+                                    app.messages.push(msg);
+                                }
+                            }
+                            app.messages_scroll = current_last_scroll;
+                        } else {
+                            // Loading older messages - prepend only new ones
+                            let _loaded_count = messages.len();
+                            let mut new_messages: Vec<_> = messages
+                                .into_iter()
+                                .filter(|m| !existing_ids.contains(&m.id))
+                                .collect();
+                            let prepend_count = new_messages.len();
+                            new_messages.append(&mut app.messages);
+                            app.messages = new_messages;
+                            app.messages_scroll = app.messages_scroll.saturating_add(prepend_count);
+                        }
+                    } else if pagination.offset == 0 {
+                        // No overlap and offset=0 - replace all (first load)
+                        app.messages = messages;
+                        app.messages_scroll = app.messages.len().saturating_sub(1);
+                    } else {
+                        // No overlap - prepend older messages
+                        let loaded_count = messages.len();
+                        let mut new_messages = messages;
+                        new_messages.append(&mut app.messages);
+                        app.messages = new_messages;
+                        app.messages_scroll = app.messages_scroll.saturating_add(loaded_count);
+                    }
+                } else {
+                    // Empty - first load
                     app.messages = messages;
                     app.messages_scroll = app.messages.len().saturating_sub(1);
-                } else {
-                    // Pagination - prepend older messages
-                    let loaded_count = messages.len();
-                    let mut new_messages = messages;
-                    new_messages.extend(app.messages.drain(..));
-                    app.messages = new_messages;
-                    // Adjust scroll to maintain position
-                    app.messages_scroll = app.messages_scroll.saturating_add(loaded_count);
                 }
 
                 // Update pagination state
@@ -832,6 +969,33 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
                     pagination.total_count = Some(total_count);
                     pagination.has_more = has_more;
                     pagination.is_loading = false;
+
+                    // Update first and last cmid from current messages
+                    if !app.messages.is_empty() {
+                        // First message is oldest (prepended at start)
+                        pagination.first_cmid = app.messages.first().and_then(|m| m.cmid);
+                        // Last message is newest (appended at end)
+                        pagination.last_cmid = app.messages.last().and_then(|m| m.cmid);
+
+                        tracing::debug!(
+                            "Updated pagination: first_cmid={:?}, last_cmid={:?}, has_more={}, offset={}, messages_count={}",
+                            pagination.first_cmid,
+                            pagination.last_cmid,
+                            pagination.has_more,
+                            pagination.offset,
+                            app.messages.len()
+                        );
+
+                        if pagination.first_cmid.is_none() || pagination.last_cmid.is_none() {
+                            tracing::warn!(
+                                "Some messages have no cmid! first: id={}, cmid={:?}; last: id={}, cmid={:?}",
+                                app.messages.first().map(|m| m.id).unwrap_or(0),
+                                pagination.first_cmid,
+                                app.messages.last().map(|m| m.id).unwrap_or(0),
+                                pagination.last_cmid
+                            );
+                        }
+                    }
                 }
             } else {
                 // No pagination state - first load
@@ -857,11 +1021,11 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
 
             // If we have a target message, scroll to it
-            if let Some(target_id) = app.target_message_id {
-                if let Some(pos) = app.messages.iter().position(|m| m.id == target_id) {
-                    app.messages_scroll = pos;
-                    app.target_message_id = None;
-                }
+            if let Some(target_id) = app.target_message_id
+                && let Some(pos) = app.messages.iter().position(|m| m.id == target_id)
+            {
+                app.messages_scroll = pos;
+                app.target_message_id = None;
             }
         }
         Message::MessageSent(msg_id, cmid) => {
@@ -992,21 +1156,20 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
         }
         Message::FilterBackspace => {
-            if let Some(filter) = &mut app.chat_filter {
-                if filter.cursor > 0 {
-                    filter.cursor -= 1;
-                    crate::input::remove_char_at(&mut filter.query, filter.cursor);
-                    // Update filtered indices
-                    filter.filtered_indices =
-                        crate::search::filter_chats(&app.chats, &filter.query);
-                    // Reset selection to first result
-                    app.selected_chat = 0;
-                    app.status = Some(format!(
-                        "Filter: {} ({} matches)",
-                        filter.query,
-                        filter.filtered_indices.len()
-                    ));
-                }
+            if let Some(filter) = &mut app.chat_filter
+                && filter.cursor > 0
+            {
+                filter.cursor -= 1;
+                crate::input::remove_char_at(&mut filter.query, filter.cursor);
+                // Update filtered indices
+                filter.filtered_indices = crate::search::filter_chats(&app.chats, &filter.query);
+                // Reset selection to first result
+                app.selected_chat = 0;
+                app.status = Some(format!(
+                    "Filter: {} ({} matches)",
+                    filter.query,
+                    filter.filtered_indices.len()
+                ));
             }
         }
         Message::ClearFilter => {
@@ -1033,22 +1196,22 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
         }
         Message::GlobalSearchBackspace => {
-            if let Some(search) = &mut app.global_search {
-                if search.cursor > 0 {
-                    search.cursor -= 1;
-                    crate::input::remove_char_at(&mut search.query, search.cursor);
-                    if search.query.is_empty() {
-                        search.results.clear();
-                        search.total_count = 0;
-                        search.selected = 0;
-                        app.status = Some("Global search: (type to search, Esc to cancel)".into());
-                    } else {
-                        search.is_loading = true;
-                        let query = search.query.clone();
-                        let status = format!("Searching: {}", search.query);
-                        app.send_action(AsyncAction::SearchMessages(query));
-                        app.status = Some(status);
-                    }
+            if let Some(search) = &mut app.global_search
+                && search.cursor > 0
+            {
+                search.cursor -= 1;
+                crate::input::remove_char_at(&mut search.query, search.cursor);
+                if search.query.is_empty() {
+                    search.results.clear();
+                    search.total_count = 0;
+                    search.selected = 0;
+                    app.status = Some("Global search: (type to search, Esc to cancel)".into());
+                } else {
+                    search.is_loading = true;
+                    let query = search.query.clone();
+                    let status = format!("Searching: {}", search.query);
+                    app.send_action(AsyncAction::SearchMessages(query));
+                    app.status = Some(status);
                 }
             }
         }
@@ -1062,38 +1225,41 @@ pub fn update(app: &mut App, msg: Message) -> Option<Message> {
             }
         }
         Message::GlobalSearchDown => {
-            if let Some(search) = &mut app.global_search {
-                if search.selected + 1 < search.results.len() {
-                    search.selected += 1;
-                }
+            if let Some(search) = &mut app.global_search
+                && search.selected + 1 < search.results.len()
+            {
+                search.selected += 1;
             }
         }
         Message::GlobalSearchSelect => {
-            if let Some(search) = &app.global_search {
-                if let Some(result) = search.results.get(search.selected) {
-                    let peer_id = result.peer_id;
-                    let message_id = result.message_id;
+            if let Some(search) = &app.global_search
+                && let Some(result) = search.results.get(search.selected)
+            {
+                let peer_id = result.peer_id;
+                let message_id = result.message_id;
 
-                    // Close search
-                    app.global_search = None;
+                // Close search
+                app.global_search = None;
 
-                    // Open chat and load messages around the found message
-                    app.current_peer_id = Some(peer_id);
-                    app.messages.clear();
-                    app.target_message_id = Some(message_id);
-                    app.is_loading = true;
-                    app.messages_pagination = Some(crate::state::MessagesPagination::new(peer_id));
-                    if let Some(pagination) = &mut app.messages_pagination {
-                        pagination.is_loading = true;
-                    }
-                    app.send_action(AsyncAction::LoadMessagesAround(peer_id, message_id));
-                    app.send_action(AsyncAction::MarkAsRead(peer_id));
-                    app.status = Some(format!("Loading chat..."));
-                    app.focus = Focus::Messages;
+                // Open chat and load messages around the found message
+                app.current_peer_id = Some(peer_id);
+                app.messages.clear();
+                app.target_message_id = Some(message_id);
+                app.is_loading = true;
+                app.messages_pagination = Some(crate::state::MessagesPagination::new(peer_id));
+                if let Some(pagination) = &mut app.messages_pagination {
+                    pagination.is_loading = true;
                 }
+                app.send_action(AsyncAction::LoadMessagesAround(peer_id, message_id));
+                app.send_action(AsyncAction::MarkAsRead(peer_id));
+                app.status = Some("Loading chat...".to_string());
+                app.focus = Focus::Messages;
             }
         }
-        Message::SearchResultsLoaded { results, total_count } => {
+        Message::SearchResultsLoaded {
+            results,
+            total_count,
+        } => {
             if let Some(search) = &mut app.global_search {
                 search.results = results;
                 search.total_count = total_count;
@@ -1233,18 +1399,20 @@ fn handle_send_command(app: &mut App, peer_id: i64, cmd: SendCommand) -> Option<
 fn handle_vk_event(app: &mut App, event: VkEvent) -> Option<Message> {
     match event {
         VkEvent::NewMessage {
+            message_id,
             peer_id,
+            timestamp,
             text,
             from_id,
         } => {
             if app.current_peer_id == Some(peer_id) {
                 app.messages.push(ChatMessage {
-                    id: 0,
+                    id: message_id,
                     cmid: None,
                     from_id,
                     from_name: app.get_user_name(from_id),
                     text,
-                    timestamp: chrono_timestamp(),
+                    timestamp,
                     is_outgoing: from_id == app.auth.user_id().unwrap_or(0),
                     is_read: true,
                     is_edited: false,

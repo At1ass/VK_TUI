@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import ChatList from './ChatList.svelte';
   import MessageView from './MessageView.svelte';
 
@@ -12,7 +13,22 @@
   let selectedChat = null;
   let loading = false;
   let status = 'Подключение...';
-  let pollInterval;
+  let unlistenCore = null;
+  let searchQuery = '';
+  let searchResults = [];
+  let searchTotal = 0;
+  let searchLoading = false;
+  let searchOpen = false;
+  let searchInChat = false;
+  let paginationMode = 'latest';
+  let pendingLoadDirection = 'replace';
+  let loadingMore = false;
+  let hasMoreOlder = true;
+  let hasMoreNewer = false;
+  let lastLoadKey = null;
+  let lastLoadAt = 0;
+  let paginationAnchorId = null;
+  let paginationOffset = 0;
 
   onMount(async () => {
     try {
@@ -20,8 +36,9 @@
       loading = true;
       await invoke('load_conversations', { offset: 0 });
 
-      // Start polling for events
-      pollInterval = setInterval(pollEvents, 200);
+      unlistenCore = await listen('core:event', (event) => {
+        handleEvent(event.payload);
+      });
     } catch (e) {
       console.error('Failed to load conversations:', e);
       status = `Ошибка: ${e}`;
@@ -29,22 +46,10 @@
   });
 
   onDestroy(() => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
+    if (unlistenCore) {
+      unlistenCore();
     }
   });
-
-  async function pollEvents() {
-    try {
-      const events = await invoke('poll_events');
-
-      for (const event of events) {
-        handleEvent(event);
-      }
-    } catch (e) {
-      console.error('Poll error:', e);
-    }
-  }
 
   function handleEvent(event) {
     if (event.ConversationsLoaded) {
@@ -62,24 +67,89 @@
       const { peer_id, messages: newMessages, profiles } = event.MessagesLoaded;
 
       if (selectedChat && selectedChat.id === peer_id) {
-        messages = newMessages;
+        let addedCount = 0;
+        if (pendingLoadDirection === 'older') {
+          const merged = mergeOlder(messages, newMessages);
+          messages = merged.items;
+          addedCount = merged.added;
+          hasMoreOlder = merged.added > 0 && (event.MessagesLoaded.has_more ?? false);
+          if (merged.added === 0) {
+            hasMoreOlder = false;
+          }
+        } else if (pendingLoadDirection === 'newer') {
+          const merged = mergeNewer(messages, newMessages);
+          messages = merged.items;
+          addedCount = merged.added;
+          hasMoreNewer = merged.added > 0 && (event.MessagesLoaded.has_more ?? false);
+          if (merged.added === 0) {
+            hasMoreNewer = false;
+          }
+        } else {
+          messages = newMessages;
+          hasMoreOlder = event.MessagesLoaded.has_more ?? false;
+          hasMoreNewer = paginationMode === 'around';
+        }
+
+        if (pendingLoadDirection === 'older') {
+          paginationOffset += addedCount;
+        } else {
+          updatePaginationAnchor(messages);
+        }
+        pendingLoadDirection = 'replace';
+        loadingMore = false;
 
         // Update users
         for (const profile of profiles) {
           users[profile.id] = profile;
         }
       }
+    } else if (event.SearchResultsLoaded) {
+      searchResults = event.SearchResultsLoaded.results || [];
+      searchTotal = event.SearchResultsLoaded.total_count || 0;
+      searchLoading = false;
+      searchOpen = true;
     } else if (event.VkEvent) {
       handleVkEvent(event.VkEvent);
+    } else if (event.MessageSent) {
+      if (selectedChat) {
+        invoke('load_messages', { peerId: selectedChat.id, offset: 0 }).catch(() => {});
+      }
+    } else if (event.MessageEdited) {
+      const { message_id } = event.MessageEdited;
+      invoke('fetch_message_by_id', { messageId: message_id }).catch(() => {});
+    } else if (event.MessageDeleted) {
+      const { message_id } = event.MessageDeleted;
+      messages = messages.filter(m => m.id !== message_id);
+    } else if (event.MessageDetailsFetched) {
+      const { message_id } = event.MessageDetailsFetched;
+      const idx = messages.findIndex(m => m.id === message_id);
+      if (idx !== -1) {
+        const current = messages[idx];
+        messages[idx] = {
+          ...current,
+          cmid: event.MessageDetailsFetched.cmid ?? current.cmid,
+          text: event.MessageDetailsFetched.text ?? current.text,
+          is_edited: event.MessageDetailsFetched.is_edited ?? current.is_edited,
+          attachments: event.MessageDetailsFetched.attachments ?? current.attachments,
+          reply: event.MessageDetailsFetched.reply ?? current.reply,
+          fwd_count: event.MessageDetailsFetched.fwd_count ?? current.fwd_count,
+          forwards: event.MessageDetailsFetched.forwards ?? current.forwards,
+        };
+        messages = messages;
+      }
+    } else if (event.SendFailed) {
+      status = `Ошибка: ${event.SendFailed}`;
     } else if (event.Error) {
       status = `Ошибка: ${event.Error}`;
+      loadingMore = false;
+      pendingLoadDirection = 'replace';
       console.error('Core error:', event.Error);
     }
   }
 
   function handleVkEvent(vkEvent) {
     if (vkEvent.NewMessage) {
-      const { peer_id, text, from_id } = vkEvent.NewMessage;
+      const { message_id, peer_id, text, from_id, timestamp } = vkEvent.NewMessage;
 
       // Update unread counter for chat
       const chat = chats.find(c => c.id === peer_id);
@@ -92,16 +162,17 @@
       // Add to messages if chat is selected
       if (selectedChat && selectedChat.id === peer_id) {
         messages = [...messages, {
-          id: Date.now(),
+          id: message_id,
           from_id,
           from_name: getUserName(from_id),
           text,
-          timestamp: Math.floor(Date.now() / 1000),
+          timestamp: timestamp || Math.floor(Date.now() / 1000),
           is_outgoing: false,
           is_read: true,
           is_edited: false,
           attachments: [],
         }];
+        invoke('mark_as_read', { peerId: peer_id }).catch(() => {});
       }
     } else if (vkEvent.ConnectionStatus !== undefined) {
       status = vkEvent.ConnectionStatus ? 'Подключено' : 'Отключено';
@@ -112,6 +183,31 @@
       setTimeout(() => {
         status = 'Готово';
       }, 3000);
+    } else if (vkEvent.MessageEditedFromLongPoll) {
+      const { peer_id, message_id } = vkEvent.MessageEditedFromLongPoll;
+      if (selectedChat && selectedChat.id === peer_id) {
+        invoke('fetch_message_by_id', { messageId: message_id }).catch(() => {});
+      }
+    } else if (vkEvent.MessageDeletedFromLongPoll) {
+      const { peer_id, message_id } = vkEvent.MessageDeletedFromLongPoll;
+      if (selectedChat && selectedChat.id === peer_id) {
+        messages = messages.filter(m => m.id !== message_id);
+      }
+    } else if (vkEvent.MessageRead) {
+      const { peer_id, message_id } = vkEvent.MessageRead;
+      if (selectedChat && selectedChat.id === peer_id) {
+        messages = messages.map(m => {
+          if (m.is_outgoing && (message_id <= 0 || m.id <= message_id)) {
+            return { ...m, is_read: true };
+          }
+          return m;
+        });
+      }
+      const chat = chats.find(c => c.id === peer_id);
+      if (chat) {
+        chat.unread_count = 0;
+        chats = chats;
+      }
     }
   }
 
@@ -126,12 +222,136 @@
   async function handleChatSelect(chat) {
     selectedChat = chat;
     messages = [];
+    paginationMode = 'latest';
+    hasMoreOlder = true;
+    hasMoreNewer = false;
+    pendingLoadDirection = 'replace';
+    paginationAnchorId = null;
+    paginationOffset = 0;
 
     try {
       await invoke('load_messages', { peerId: chat.id, offset: 0 });
+      await invoke('mark_as_read', { peerId: chat.id });
     } catch (e) {
       console.error('Failed to load messages:', e);
     }
+  }
+
+  async function handleSearch() {
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    searchLoading = true;
+    searchOpen = true;
+    searchResults = [];
+    searchTotal = 0;
+
+    const peerId = searchInChat && selectedChat ? selectedChat.id : null;
+    try {
+      await invoke('search_messages', { query, peerId });
+    } catch (e) {
+      console.error('Search failed:', e);
+      searchLoading = false;
+    }
+  }
+
+  async function handleSearchResultClick(result) {
+    const chatId = result.peer_id;
+    const messageId = result.message_id;
+
+    let chat = chats.find(c => c.id === chatId);
+    if (!chat) {
+      chat = {
+        id: chatId,
+        title: result.chat_title || `Chat ${chatId}`,
+        last_message: result.text,
+        last_message_time: result.timestamp,
+        unread_count: 0,
+        is_online: false,
+      };
+      chats = [chat, ...chats];
+    }
+
+    selectedChat = chat;
+    messages = [];
+    searchOpen = false;
+    paginationMode = 'around';
+    hasMoreOlder = true;
+    hasMoreNewer = true;
+    pendingLoadDirection = 'replace';
+    paginationAnchorId = null;
+    paginationOffset = 0;
+
+    try {
+      await invoke('load_messages_around', { peerId: chatId, messageId });
+    } catch (e) {
+      console.error('Failed to load messages around search result:', e);
+    }
+  }
+
+  async function handleLoadMore(direction, anchor) {
+    if (!selectedChat || !anchor || loadingMore) return;
+    if (!anchor.id) return;
+    if (direction === 'older' && !hasMoreOlder) return;
+    if (direction === 'newer' && !hasMoreNewer) return;
+
+    const loadKey = `${direction}:${anchor.id}:${paginationOffset}`;
+    const now = Date.now();
+    if (lastLoadKey === loadKey && now - lastLoadAt < 1500) {
+      return;
+    }
+    lastLoadKey = loadKey;
+    lastLoadAt = now;
+
+    loadingMore = true;
+    pendingLoadDirection = direction;
+
+    const count = 50;
+
+    try {
+      if (direction === 'older') {
+        const startMessageId = paginationAnchorId ?? anchor.id;
+        await invoke('load_messages_with_start_message_id', {
+          peerId: selectedChat.id,
+          startMessageId,
+          offset: paginationOffset,
+          count,
+        });
+      } else if (paginationMode === 'around') {
+        await invoke('load_messages', { peerId: selectedChat.id, offset: 0 });
+      }
+    } catch (e) {
+      console.error('Failed to load more messages:', e);
+      loadingMore = false;
+    }
+  }
+
+  function mergeOlder(existing, incoming) {
+    const existingIds = new Set(existing.map(m => m.id));
+    const filtered = incoming.filter(m => !existingIds.has(m.id));
+    return { items: [...filtered, ...existing], added: filtered.length };
+  }
+
+  function mergeNewer(existing, incoming) {
+    const existingIds = new Set(existing.map(m => m.id));
+    const filtered = incoming.filter(m => !existingIds.has(m.id));
+    return { items: [...existing, ...filtered], added: filtered.length };
+  }
+
+  function updatePaginationAnchor(list) {
+    if (!list.length) {
+      paginationAnchorId = null;
+      paginationOffset = 0;
+      return;
+    }
+    let maxId = list[0].id;
+    for (const msg of list) {
+      if (msg.id > maxId) {
+        maxId = msg.id;
+      }
+    }
+    paginationAnchorId = maxId;
+    paginationOffset = list.length;
   }
 
   async function handleSendMessage(text) {
@@ -157,12 +377,72 @@
       console.error('Failed to send reply:', e);
     }
   }
+
+  async function handleForward(messageIds, comment) {
+    if (!selectedChat || !comment.trim() || messageIds.length === 0) return;
+
+    try {
+      await invoke('send_forward', {
+        peerId: selectedChat.id,
+        messageIds,
+        comment,
+      });
+    } catch (e) {
+      console.error('Failed to forward messages:', e);
+    }
+  }
+
+  async function handleEditMessage(messageId, cmid, text) {
+    if (!selectedChat || !text.trim()) return;
+
+    try {
+      await invoke('edit_message', {
+        peerId: selectedChat.id,
+        messageId,
+        cmid: cmid ?? null,
+        text,
+      });
+    } catch (e) {
+      console.error('Failed to edit message:', e);
+    }
+  }
+
+  async function handleDeleteMessages(messageIds, forAll) {
+    if (!selectedChat || messageIds.length === 0) return;
+
+    for (const messageId of messageIds) {
+      try {
+        await invoke('delete_message', {
+          peerId: selectedChat.id,
+          messageId,
+          forAll,
+        });
+      } catch (e) {
+        console.error('Failed to delete message:', e);
+      }
+    }
+  }
 </script>
 
 <div class="main-view">
   <header class="header">
     <h2>Сообщения</h2>
     <div class="header-right">
+      <div class="search-box">
+        <input
+          type="text"
+          placeholder="Поиск сообщений..."
+          bind:value={searchQuery}
+          on:keypress={(e) => e.key === 'Enter' && handleSearch()}
+        />
+        <label class="search-scope">
+          <input type="checkbox" bind:checked={searchInChat} disabled={!selectedChat} />
+          В чате
+        </label>
+        <button class="btn-search" on:click={handleSearch}>
+          Найти
+        </button>
+      </div>
       <span class="status">{status}</span>
       <button class="btn-logout" on:click={onLogout}>
         Выйти
@@ -185,6 +465,13 @@
         {users}
         onSendMessage={handleSendMessage}
         onSendReply={handleSendReply}
+        onForward={handleForward}
+        onEditMessage={handleEditMessage}
+        onDeleteMessages={handleDeleteMessages}
+        onLoadMore={handleLoadMore}
+        canLoadOlder={hasMoreOlder}
+        canLoadNewer={hasMoreNewer}
+        autoScroll={paginationMode === 'latest'}
       />
     {:else}
       <div class="empty-state">
@@ -192,6 +479,37 @@
       </div>
     {/if}
   </div>
+
+  {#if searchOpen}
+    <div class="search-panel">
+      <div class="search-panel-header">
+        <span>Результаты поиска ({searchTotal})</span>
+        <button class="btn-clear" on:click={() => (searchOpen = false)}>Закрыть</button>
+      </div>
+      {#if searchLoading}
+        <div class="search-state">Поиск...</div>
+      {:else if searchResults.length === 0}
+        <div class="search-state">Ничего не найдено</div>
+      {:else}
+        <div class="search-results">
+          {#each searchResults as result (result.message_id)}
+            <button class="search-result" on:click={() => handleSearchResultClick(result)}>
+              <div class="search-title">
+                {result.chat_title}
+              </div>
+              <div class="search-meta">
+                <span>{result.from_name}</span>
+                <span>{new Date(result.timestamp * 1000).toLocaleString('ru-RU')}</span>
+              </div>
+              <div class="search-text">
+                {result.text}
+              </div>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -207,8 +525,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1rem;
-    background: var(--cosmic-surface-alt);
+    padding: 0.75rem 1rem;
+    background: var(--cosmic-surface);
     border-bottom: 1px solid var(--cosmic-border);
   }
 
@@ -223,6 +541,38 @@
     gap: 1rem;
   }
 
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .search-box input {
+    background: var(--cosmic-surface);
+    border: 1px solid var(--cosmic-border);
+    border-radius: var(--radius-m);
+    padding: 0.4rem 0.6rem;
+    color: var(--cosmic-text);
+    font-size: 12px;
+    min-width: 180px;
+  }
+
+  .search-scope {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 11px;
+    color: var(--cosmic-muted);
+  }
+
+  .btn-search {
+    padding: 0.4rem 0.75rem;
+    background: var(--cosmic-accent);
+    color: #ffffff;
+    border-radius: var(--radius-m);
+    font-size: 12px;
+  }
+
   .status {
     font-size: 12px;
     color: var(--cosmic-muted);
@@ -232,7 +582,7 @@
     padding: 0.5rem 1rem;
     background: var(--cosmic-surface);
     border: 1px solid var(--cosmic-border);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     color: var(--cosmic-text);
     transition: background 0.2s;
   }
@@ -253,5 +603,77 @@
     align-items: center;
     justify-content: center;
     color: var(--cosmic-muted);
+  }
+
+  .search-panel {
+    position: fixed;
+    right: 1rem;
+    top: 4.5rem;
+    width: min(360px, 90vw);
+    max-height: 70vh;
+    overflow: hidden;
+    background: var(--cosmic-surface);
+    border: 1px solid var(--cosmic-border);
+    border-radius: var(--radius-l);
+    display: flex;
+    flex-direction: column;
+    z-index: 1200;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .search-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--cosmic-border);
+    font-size: 12px;
+    color: var(--cosmic-muted);
+  }
+
+  .search-state {
+    padding: 1rem;
+    text-align: center;
+    color: var(--cosmic-muted);
+  }
+
+  .search-results {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .search-result {
+    text-align: left;
+    padding: 0.6rem;
+    border-radius: var(--radius-m);
+    background: var(--cosmic-surface-alt);
+    border: 1px solid var(--cosmic-border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .search-result:hover {
+    border-color: var(--cosmic-accent);
+  }
+
+  .search-title {
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .search-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--cosmic-muted);
+  }
+
+  .search-text {
+    font-size: 12px;
+    color: var(--cosmic-text);
   }
 </style>

@@ -71,6 +71,10 @@ Frontend communicates via Tauri IPC:
 // Call Rust from JS
 await invoke('load_messages', { peerId: 123, offset: 0 });
 
-// Poll events
-const events = await invoke('poll_events');
+import { listen } from '@tauri-apps/api/event';
+
+// Receive core events pushed from Rust
+const unlisten = await listen('core:event', (event) => {
+  console.log(event.payload);
+});
 ```

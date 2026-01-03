@@ -5,13 +5,16 @@
 
 use crate::models::{AttachmentInfo, Chat, ChatMessage, ForwardItem, ReplyPreview, SearchResult};
 use vk_api::User;
+use serde::{Serialize, Deserialize};
 
 /// Events from VK LongPoll API.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum VkEvent {
     /// New message received.
     NewMessage {
+        message_id: i64,
         peer_id: i64,
+        timestamp: i64,
         text: String,
         from_id: i64,
     },
@@ -31,7 +34,7 @@ pub enum VkEvent {
 ///
 /// These events notify frontends about state changes and
 /// results of async operations.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoreEvent {
     // === Data Loaded ===
     /// Conversations loaded from API.

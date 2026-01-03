@@ -1,6 +1,7 @@
 //! Application state management.
 
 use std::sync::Arc;
+use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, Mutex};
 use vk_api::{VkClient, auth::AuthManager};
 use vk_core::{AsyncCommand, CommandExecutor, CoreEvent};
@@ -10,7 +11,6 @@ pub struct AppState {
     pub auth: Arc<Mutex<AuthManager>>,
     pub vk_client: Arc<Mutex<Option<Arc<VkClient>>>>,
     pub command_tx: Arc<Mutex<Option<mpsc::UnboundedSender<AsyncCommand>>>>,
-    pub event_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<CoreEvent>>>>,
 }
 
 impl AppState {
@@ -19,12 +19,15 @@ impl AppState {
             auth: Arc::new(Mutex::new(AuthManager::default())),
             vk_client: Arc::new(Mutex::new(None)),
             command_tx: Arc::new(Mutex::new(None)),
-            event_rx: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Initialize VK client and executor.
-    pub async fn initialize_session(&self, token: String) -> Result<(), String> {
+    pub async fn initialize_session(
+        &self,
+        app_handle: AppHandle,
+        token: String,
+    ) -> Result<(), String> {
         let client = Arc::new(VkClient::new(token));
 
         // Validate session
@@ -36,12 +39,17 @@ impl AppState {
 
         // Create command/event channels
         let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<AsyncCommand>();
-        let (event_tx, event_rx) = mpsc::unbounded_channel::<CoreEvent>();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel::<CoreEvent>();
 
         // Store in state
         *self.vk_client.lock().await = Some(client.clone());
         *self.command_tx.lock().await = Some(cmd_tx);
-        *self.event_rx.lock().await = Some(event_rx);
+        let emit_handle = app_handle.clone();
+        tokio::spawn(async move {
+            while let Some(event) = event_rx.recv().await {
+                let _ = emit_handle.emit("core:event", event);
+            }
+        });
 
         // Spawn command executor
         let executor = CommandExecutor::new(client.clone(), event_tx.clone());
@@ -58,6 +66,26 @@ impl AppState {
 
         Ok(())
     }
+
+    /// Persist token from OAuth redirect and initialize session.
+    pub async fn login_from_redirect(
+        &self,
+        app_handle: AppHandle,
+        redirect_url: &str,
+    ) -> Result<(), String> {
+        let mut auth = self.auth.lock().await;
+        auth.save_token_from_url(redirect_url)
+            .map_err(|e| format!("Failed to parse token: {}", e))?;
+
+        let token = auth
+            .access_token()
+            .ok_or_else(|| "Token not found after save".to_string())?
+            .to_string();
+        drop(auth);
+
+        self.initialize_session(app_handle, token).await
+    }
+
 
     /// Run VK LongPoll listener.
     async fn run_long_poll(client: Arc<VkClient>, event_tx: mpsc::UnboundedSender<CoreEvent>) {

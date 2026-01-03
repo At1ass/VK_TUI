@@ -88,11 +88,11 @@
   }
 
   .chat-item:hover {
-    background: #1e2536;
+    background: var(--cosmic-surface-alt);
   }
 
   .chat-item.selected {
-    background: var(--cosmic-surface-alt);
+    background: var(--cosmic-selection);
     border-left: 3px solid var(--cosmic-accent);
   }
 
@@ -115,11 +115,11 @@
 
   .unread-badge {
     background: var(--cosmic-accent);
-    color: var(--cosmic-bg);
+    color: #ffffff;
     font-size: 11px;
     font-weight: 600;
     padding: 2px 6px;
-    border-radius: 10px;
+    border-radius: 999px;
   }
 
   .chat-preview {

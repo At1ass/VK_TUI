@@ -125,7 +125,7 @@ CommandExecutor → VK API
     ↓
 CoreEvent
     ↓
-poll_events() → Frontend
+core:event → Frontend (push)
 ```
 
 ### Frontend (Svelte)
@@ -135,10 +135,9 @@ poll_events() → Frontend
 await invoke('load_messages', { peerId: 123, offset: 0 });
 
 // Получение событий
-setInterval(async () => {
-  const events = await invoke('poll_events');
-  events.forEach(handleEvent);
-}, 200);
+const unlisten = await listen('core:event', (event) => {
+  handleEvent(event.payload);
+});
 ```
 
 ## Возможности

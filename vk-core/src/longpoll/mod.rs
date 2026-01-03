@@ -20,7 +20,9 @@ pub fn handle_update(update: &Value) -> Option<VkEvent> {
         }
         4 => {
             // New message: [4, message_id, flags, peer_id, timestamp, text, extra, attachments]
+            let message_id = arr.get(1).and_then(|v| v.as_i64())?;
             let peer_id = arr.get(3).and_then(|v| v.as_i64())?;
+            let timestamp = arr.get(4).and_then(|v| v.as_i64()).unwrap_or(0);
             let text = arr
                 .get(5)
                 .and_then(|v| v.as_str())
@@ -34,7 +36,9 @@ pub fn handle_update(update: &Value) -> Option<VkEvent> {
                 .and_then(|s| s.parse::<i64>().ok())
                 .or(Some(peer_id))?;
             Some(VkEvent::NewMessage {
+                message_id,
                 peer_id,
+                timestamp,
                 text,
                 from_id,
             })

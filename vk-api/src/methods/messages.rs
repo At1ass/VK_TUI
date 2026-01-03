@@ -155,6 +155,82 @@ impl<'a> MessagesApi<'a> {
         self.client.request("messages.getHistory", params).await
     }
 
+    /// Get message history with offset from a specific message
+    ///
+    /// # Arguments
+    /// * `peer_id` - Peer ID
+    /// * `start_message_id` - Conversation message ID (cmid) to start from
+    /// * `offset` - Offset from start_cmid (negative for older messages, positive for newer)
+    /// * `count` - Number of messages (max: 200)
+    ///
+    /// # Returns
+    /// MessagesHistoryResponse with messages
+    ///
+    /// # VK API
+    /// Method: messages.getHistory with start_cmid and offset
+    /// https://dev.vk.com/method/messages.getHistory
+    pub async fn get_history_with_offset(
+        &self,
+        peer_id: i64,
+        start_message_id: i64,
+        offset: i32,
+        count: u32,
+    ) -> Result<MessagesHistoryResponse> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        // Use start_cmid for conversation message id (as in official web client)
+        params.insert("start_cmid", start_message_id.to_string());
+        params.insert("offset", offset.to_string());
+        params.insert("count", count.to_string());
+        params.insert("extended", "1".to_string());
+
+        tracing::debug!(
+            "get_history_with_offset: peer_id={}, start_cmid={}, offset={}, count={}",
+            peer_id,
+            start_message_id,
+            offset,
+            count
+        );
+
+        self.client.request("messages.getHistory", params).await
+    }
+
+    /// Get message history with offset from a specific message id
+    ///
+    /// # Arguments
+    /// * `peer_id` - Peer ID
+    /// * `start_message_id` - Message ID to anchor pagination
+    /// * `offset` - Offset from start_message_id
+    /// * `count` - Number of messages (max: 200)
+    ///
+    /// # VK API
+    /// Method: messages.getHistory with start_message_id and offset
+    /// https://dev.vk.com/method/messages.getHistory
+    pub async fn get_history_with_start_message_id(
+        &self,
+        peer_id: i64,
+        start_message_id: i64,
+        offset: i32,
+        count: u32,
+    ) -> Result<MessagesHistoryResponse> {
+        let mut params = HashMap::new();
+        params.insert("peer_id", peer_id.to_string());
+        params.insert("start_message_id", start_message_id.to_string());
+        params.insert("offset", offset.to_string());
+        params.insert("count", count.to_string());
+        params.insert("extended", "1".to_string());
+
+        tracing::debug!(
+            "get_history_with_start_message_id: peer_id={}, start_message_id={}, offset={}, count={}",
+            peer_id,
+            start_message_id,
+            offset,
+            count
+        );
+
+        self.client.request("messages.getHistory", params).await
+    }
+
     /// Get message by conversation_message_id
     ///
     /// # VK API

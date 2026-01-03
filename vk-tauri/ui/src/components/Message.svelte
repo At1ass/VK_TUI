@@ -1,7 +1,13 @@
 <script>
+  import ForwardNode from './ForwardNode.svelte';
+
   export let message;
   export let users = {};
-  export let onReply;
+  export let onSelect;
+  export let onContextMenu;
+  export let isSelected = false;
+
+  let forwardsOpen = false;
 
   function formatTime(timestamp) {
     const date = new Date(timestamp * 1000);
@@ -45,7 +51,17 @@
   }
 </script>
 
-<div class="message" class:outgoing={message.is_outgoing}>
+<div
+  class="message"
+  class:outgoing={message.is_outgoing}
+  class:selected={isSelected}
+  data-message-id={message.id}
+  on:click={(event) => onSelect?.(message, event)}
+  on:contextmenu={(event) => {
+    event.preventDefault();
+    onContextMenu?.(message, event);
+  }}
+>
   <div class="message-bubble">
     <div class="message-header">
       <span class="sender">{message.from_name || getUserName(message.from_id)}</span>
@@ -69,9 +85,11 @@
         {#each message.attachments as attachment}
           <div class="attachment">
             {#if attachment.type === 'photo'}
-              <img src={attachment.url} alt="Photo" class="attachment-image" />
+              <img src={attachment.url} alt="Attachment" class="attachment-image" />
             {:else if attachment.type === 'video'}
-              <video src={attachment.url} controls class="attachment-video"></video>
+              <video src={attachment.url} controls class="attachment-video">
+                <track kind="captions" />
+              </video>
             {:else if attachment.type === 'audio'}
               <audio src={attachment.url} controls class="attachment-audio"></audio>
             {:else}
@@ -84,9 +102,18 @@
       </div>
     {/if}
 
-    {#if message.fwd_count > 0}
+    {#if message.forwards && message.forwards.length > 0}
       <div class="forwards">
-        ↪ {message.fwd_count} переслано
+        <button class="forward-toggle" on:click={() => (forwardsOpen = !forwardsOpen)}>
+          {forwardsOpen ? 'Свернуть пересланные' : `Пересланные сообщения (${message.forwards.length})`}
+        </button>
+        {#if forwardsOpen}
+          <div class="forwards-tree">
+            {#each message.forwards as item}
+              <ForwardNode item={item} level={0} />
+            {/each}
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -102,9 +129,6 @@
     </div>
   </div>
 
-  <button class="btn-reply" on:click={() => onReply(message)}>
-    Ответить
-  </button>
 </div>
 
 <style>
@@ -114,6 +138,7 @@
     gap: 0.25rem;
     max-width: 70%;
     align-self: flex-start;
+    cursor: default;
   }
 
   .message.outgoing {
@@ -123,16 +148,21 @@
   .message-bubble {
     background: var(--cosmic-surface);
     border: 1px solid var(--cosmic-border);
-    border-radius: 12px;
+    border-radius: var(--radius-l);
     padding: 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
   }
 
+  .message.selected .message-bubble {
+    border-color: var(--cosmic-accent);
+    box-shadow: 0 0 0 1px rgba(88, 170, 255, 0.2);
+  }
+
   .message.outgoing .message-bubble {
-    background: #14202e;
-    border-color: #2a3243;
+    background: #20334f;
+    border-color: #2f466a;
   }
 
   .message-header {
@@ -157,8 +187,8 @@
     display: flex;
     gap: 0.5rem;
     padding: 0.5rem;
-    background: rgba(88, 170, 255, 0.1);
-    border-radius: 6px;
+    background: rgba(53, 132, 228, 0.15);
+    border-radius: var(--radius-s);
   }
 
   .reply-bar {
@@ -197,18 +227,18 @@
 
   .attachment-image {
     max-width: 100%;
-    border-radius: 8px;
+    border-radius: var(--radius-m);
   }
 
   .attachment-video, .attachment-audio {
     max-width: 100%;
-    border-radius: 8px;
+    border-radius: var(--radius-m);
   }
 
   .attachment-doc {
     padding: 0.5rem;
     background: var(--cosmic-surface-alt);
-    border-radius: 6px;
+    border-radius: var(--radius-s);
     font-size: 12px;
   }
 
@@ -216,6 +246,21 @@
     font-size: 11px;
     color: var(--cosmic-muted);
     font-style: italic;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .forward-toggle {
+    align-self: flex-start;
+    font-size: 11px;
+    color: var(--cosmic-accent);
+  }
+
+  .forwards-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
   }
 
   .message-footer {
@@ -226,20 +271,4 @@
     color: var(--cosmic-muted);
   }
 
-  .btn-reply {
-    align-self: flex-start;
-    padding: 0.25rem 0.5rem;
-    font-size: 11px;
-    color: var(--cosmic-accent);
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-
-  .message:hover .btn-reply {
-    opacity: 1;
-  }
-
-  .btn-reply:hover {
-    text-decoration: underline;
-  }
 </style>

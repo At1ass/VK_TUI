@@ -1,25 +1,36 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
-  import { open } from '@tauri-apps/plugin-shell';
 
-  export let error = null;
+  export let externalError = null;
   export let onLogin;
 
   let redirectUrl = '';
   let loading = false;
+  let localError = null;
 
   async function openAuthUrl() {
     try {
       const url = await invoke('get_auth_url');
-      await open(url);
+      console.log('Opening URL:', url);
+
+      // Try using shell plugin
+      try {
+        const { open } = await import('@tauri-apps/plugin-shell');
+        await open(url);
+      } catch (shellError) {
+        console.error('Shell plugin error:', shellError);
+        // Fallback: copy URL to clipboard and show message
+        error = `Скопируйте URL: ${url}`;
+      }
     } catch (e) {
       console.error('Failed to open auth URL:', e);
+      localError = `Ошибка: ${e}`;
     }
   }
 
   async function handleSubmit() {
     if (!redirectUrl.trim()) {
-      error = 'Введите redirect URL';
+      localError = 'Введите redirect URL';
       return;
     }
 
@@ -33,9 +44,9 @@
   <div class="auth-card">
     <h1>VK Messenger</h1>
 
-    {#if error}
+    {#if localError || externalError}
       <div class="error">
-        {error}
+        {localError || externalError}
       </div>
     {/if}
 
@@ -81,11 +92,11 @@
   .auth-card {
     background: var(--cosmic-surface);
     border: 1px solid var(--cosmic-border);
-    border-radius: 12px;
+    border-radius: var(--radius-l);
     padding: 2rem;
     width: 90%;
     max-width: 500px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   }
 
   h1 {
@@ -106,7 +117,7 @@
   .error {
     background: rgba(255, 122, 122, 0.1);
     border: 1px solid var(--cosmic-danger);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     padding: 0.75rem;
     margin-bottom: 1rem;
     color: var(--cosmic-danger);
@@ -122,7 +133,7 @@
   input {
     background: var(--cosmic-surface-alt);
     border: 1px solid var(--cosmic-border);
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     padding: 0.75rem 1rem;
     color: var(--cosmic-text);
     font-size: 14px;
@@ -145,7 +156,7 @@
 
   button {
     padding: 0.75rem 1.5rem;
-    border-radius: 8px;
+    border-radius: var(--radius-m);
     font-weight: 600;
     transition: all 0.2s;
     flex: 1;
@@ -153,12 +164,11 @@
 
   .btn-primary {
     background: var(--cosmic-accent);
-    color: var(--cosmic-bg);
+    color: #ffffff;
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: #6db9ff;
-    box-shadow: 0 2px 8px rgba(88, 170, 255, 0.3);
+    background: #2f76cf;
   }
 
   .btn-secondary {
@@ -168,7 +178,7 @@
   }
 
   .btn-secondary:hover:not(:disabled) {
-    background: #202638;
+    background: var(--cosmic-surface);
   }
 
   button:disabled {

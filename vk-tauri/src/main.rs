@@ -21,9 +21,17 @@ fn main() {
             commands::validate_session,
             commands::load_conversations,
             commands::load_messages,
+            commands::load_messages_around,
+            commands::load_messages_with_offset,
+            commands::load_messages_with_start_message_id,
             commands::send_message,
             commands::send_reply,
-            commands::poll_events,
+            commands::send_forward,
+            commands::edit_message,
+            commands::delete_message,
+            commands::fetch_message_by_id,
+            commands::search_messages,
+            commands::mark_as_read,
             commands::logout,
         ])
         .run(tauri::generate_context!())
