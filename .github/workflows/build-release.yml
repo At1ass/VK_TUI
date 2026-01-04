@@ -78,8 +78,8 @@ jobs:
 
       - name: Build Flatpak
         run: |
-          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak-builder --force-clean --install-deps-from=flathub --repo=flatpak/repo flatpak/build flatpak/com.at1ass.VkClient.yml
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --user --force-clean --install-deps-from=flathub --repo=flatpak/repo flatpak/build flatpak/com.at1ass.VkClient.yml
           mkdir -p target/release/bundle/flatpak
           flatpak build-bundle flatpak/repo target/release/bundle/flatpak/com.at1ass.VkClient.flatpak com.at1ass.VkClient
 
