@@ -31,9 +31,6 @@
       "appimage": {
         "bundleMediaFramework": false
       }
-    },
-    "android": {
-      "minSdkVersion": 24
     }
   },
   "app": {
