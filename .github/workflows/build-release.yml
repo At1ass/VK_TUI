@@ -55,6 +55,8 @@ jobs:
       - name: Build Tauri app
         working-directory: vk-tauri
         run: cargo tauri build --bundles appimage,deb
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
@@ -87,6 +89,12 @@ jobs:
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
         shell: bash
 
+      - name: Install Windows bundler tools
+        run: |
+          choco install wixtoolset --yes
+          choco install nsis --yes
+        shell: powershell
+
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version '^2.0.0' --locked
         shell: bash
@@ -97,7 +105,7 @@ jobs:
 
       - name: Build Tauri app
         working-directory: vk-tauri
-        run: cargo tauri build
+        run: cargo tauri build --bundles msi,nsis
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
@@ -163,6 +171,18 @@ jobs:
       - name: Init Android project
         working-directory: vk-tauri
         run: cargo tauri android init
+
+      - name: Configure Android signing (optional)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        working-directory: vk-tauri
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > vk-messenger.keystore
+          cat > gen/android/key.properties <<'EOF'
+          storeFile=../../vk-messenger.keystore
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          EOF
 
       - name: Build Android APK
         working-directory: vk-tauri

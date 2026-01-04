@@ -149,6 +149,20 @@ storeFile=../../vk-messenger.keystore
 cargo tauri android build --apk --release
 ```
 
+### CI signing (GitHub Actions)
+
+Add the following secrets to the repository:
+
+- `ANDROID_KEYSTORE_BASE64` (base64 of `vk-messenger.keystore`)
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+
+Create the base64 value:
+```bash
+base64 -w 0 vk-messenger.keystore
+```
+
 ---
 
 ## 🔍 Troubleshooting
