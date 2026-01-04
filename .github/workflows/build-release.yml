@@ -71,23 +71,19 @@ jobs:
 
       - name: Build Tauri app
         working-directory: vk-tauri
-        run: cargo tauri build --bundles appimage,deb
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-          NO_STRIP: "1"
-          VERBOSE: "1"
-
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-appimage
-          path: target/release/bundle/appimage/*.AppImage
+        run: cargo tauri build --bundles deb,rpm
 
       - name: Upload deb
         uses: actions/upload-artifact@v4
         with:
           name: linux-deb
           path: target/release/bundle/deb/*.deb
+
+      - name: Upload RPM
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-rpm
+          path: target/release/bundle/rpm/*.rpm
 
   build-windows:
     name: Build Windows (MSI, NSIS)
@@ -157,8 +153,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            linux-appimage/*
             linux-deb/*
+            linux-rpm/*
             windows-msi/*
             windows-nsis/*
           draft: false

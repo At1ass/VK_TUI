@@ -1,5 +1,5 @@
 {
-  "productName": "VK Messenger",
+  "productName": "VK-Messenger",
   "version": "0.1.0",
   "identifier": "com.vk.messenger",
   "build": {
@@ -10,7 +10,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb", "msi", "nsis"],
+    "targets": ["deb", "rpm", "msi", "nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
