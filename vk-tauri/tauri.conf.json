@@ -29,7 +29,7 @@
         "desktopTemplate": "assets/vk-messenger.desktop"
       },
       "appimage": {
-        "bundleMediaFramework": true
+        "bundleMediaFramework": false
       }
     },
     "android": {

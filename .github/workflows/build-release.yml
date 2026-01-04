@@ -25,6 +25,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './vk-tauri -> target'
+
       - name: Ensure cargo bin in PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
@@ -72,6 +77,7 @@ jobs:
           RUST_LOG: tauri_bundler=trace
           LINUXDEPLOY_DEBUG: "1"
           LINUXDEPLOY_LOG_LEVEL: "debug"
+          NO_GSTREAMER: "1"
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
@@ -99,6 +105,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './vk-tauri -> target'
 
       - name: Ensure cargo bin in PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
@@ -149,6 +160,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './vk-tauri -> target'
+
       - name: Ensure cargo bin in PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
@@ -187,22 +203,26 @@ jobs:
         working-directory: vk-tauri
         run: cargo tauri android init
 
-      - name: Configure Android signing (optional)
+      - name: Configure Android signing
         working-directory: vk-tauri
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
-            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/vk-messenger.keystore"
+            # Create keystore from base64 secret (following Tauri docs)
+            base64 -d <<< "${ANDROID_KEYSTORE_BASE64}" > ${RUNNER_TEMP}/upload-keystore.jks
+
+            # Create keystore.properties (following Tauri docs format)
             cd gen/android
-            printf "keyAlias=%s\npassword=%s\nstoreFile=%s\n" \
-              "${ANDROID_KEY_ALIAS}" \
-              "${ANDROID_KEY_PASSWORD:-${ANDROID_KEYSTORE_PASSWORD}}" \
-              "${RUNNER_TEMP}/vk-messenger.keystore" \
-              > keystore.properties
+            echo "keyAlias=${ANDROID_KEY_ALIAS}" > keystore.properties
+            echo "password=${ANDROID_KEY_PASSWORD}" >> keystore.properties
+            echo "storeFile=${RUNNER_TEMP}/upload-keystore.jks" >> keystore.properties
+
+            echo "✅ Android signing configured"
+          else
+            echo "⚠️  No keystore secrets found - APK will be unsigned"
           fi
 
       - name: Build Android APK
@@ -211,6 +231,55 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
           NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.9519653
+
+      - name: Sign APK (if unsigned)
+        if: success()
+        env:
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          APK_DIR="vk-tauri/gen/android/app/build/outputs/apk/universal/release"
+          UNSIGNED_APK="${APK_DIR}/app-universal-release-unsigned.apk"
+          SIGNED_APK="${APK_DIR}/VK-Messenger-universal-release.apk"
+
+          # Check if APK exists and needs signing
+          if [ -f "$UNSIGNED_APK" ]; then
+            if [ -f "${RUNNER_TEMP}/upload-keystore.jks" ]; then
+              echo "📝 Signing APK manually (Gradle build didn't sign it)..."
+
+              # Find build-tools directory
+              BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | sort -V | tail -n 1)
+              export PATH="${BUILD_TOOLS_DIR}:${PATH}"
+
+              # Align the APK
+              zipalign -v -p 4 "$UNSIGNED_APK" "${UNSIGNED_APK%.apk}-aligned.apk"
+
+              # Sign the APK
+              apksigner sign \
+                --ks "${RUNNER_TEMP}/upload-keystore.jks" \
+                --ks-pass "pass:${ANDROID_KEY_PASSWORD}" \
+                --key-pass "pass:${ANDROID_KEY_PASSWORD}" \
+                --ks-key-alias "${ANDROID_KEY_ALIAS}" \
+                --out "$SIGNED_APK" \
+                "${UNSIGNED_APK%.apk}-aligned.apk"
+
+              # Verify the signature
+              apksigner verify "$SIGNED_APK"
+              echo "✅ APK signed and verified successfully!"
+            else
+              echo "⚠️  Unsigned APK found but no keystore available"
+              mv "$UNSIGNED_APK" "$SIGNED_APK"
+            fi
+          else
+            echo "ℹ️  Checking for already signed APK..."
+            ls -la "$APK_DIR/" || true
+            # If there's a signed APK from Gradle, rename it
+            GRADLE_SIGNED=$(find "$APK_DIR" -name "app-universal-release.apk" -o -name "*-signed.apk" | head -1)
+            if [ -n "$GRADLE_SIGNED" ] && [ -f "$GRADLE_SIGNED" ]; then
+              echo "✅ Found Gradle-signed APK: $GRADLE_SIGNED"
+              mv "$GRADLE_SIGNED" "$SIGNED_APK"
+            fi
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
