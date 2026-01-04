@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=VK Messenger
+GenericName=VK Messenger
+Comment=VKontakte messenger client
+Exec=vk-messenger %U
+Icon=vk-messenger
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+Keywords=vk;vkontakte;messenger;chat;im;
+StartupNotify=true
+StartupWMClass=vk-messenger
+MimeType=x-scheme-handler/vk;

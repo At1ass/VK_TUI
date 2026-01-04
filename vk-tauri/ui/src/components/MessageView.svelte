@@ -296,7 +296,7 @@
   {#if selectedIds.size > 0}
     <div class="selection-bar">
       <span>Выбрано: {selectedIds.size}</span>
-      <button class="btn-clear" on:click={clearSelection}>Снять выделение</button>
+      <button class="button flat" on:click={clearSelection}>Снять выделение</button>
     </div>
   {/if}
 
@@ -332,8 +332,8 @@
           rows="4"
         ></textarea>
         <div class="modal-actions">
-          <button class="btn-secondary" on:click={() => (forwardModalOpen = false)}>Отмена</button>
-          <button class="btn-primary" on:click={submitForward}>Переслать</button>
+          <button class="button" on:click={() => (forwardModalOpen = false)}>Отмена</button>
+          <button class="button suggested" on:click={submitForward}>Переслать</button>
         </div>
       </div>
     </div>
@@ -345,8 +345,8 @@
         <h3>Редактировать сообщение</h3>
         <textarea bind:value={editText} rows="4"></textarea>
         <div class="modal-actions">
-          <button class="btn-secondary" on:click={() => (editModalOpen = false)}>Отмена</button>
-          <button class="btn-primary" on:click={submitEdit}>Сохранить</button>
+          <button class="button" on:click={() => (editModalOpen = false)}>Отмена</button>
+          <button class="button suggested" on:click={submitEdit}>Сохранить</button>
         </div>
       </div>
     </div>
@@ -360,8 +360,8 @@
           <div class="error">{deleteError}</div>
         {/if}
         <div class="modal-actions">
-          <button class="btn-secondary" on:click={() => submitDelete(false)}>Для себя</button>
-          <button class="btn-danger" on:click={() => submitDelete(true)}>Для всех</button>
+          <button class="button" on:click={() => submitDelete(false)}>Для себя</button>
+          <button class="button destructive" on:click={() => submitDelete(true)}>Для всех</button>
         </div>
       </div>
     </div>
@@ -373,57 +373,56 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--cosmic-bg);
+    background: var(--view-bg-color);
     overflow: hidden;
   }
 
   .messages-container {
     flex: 1;
     overflow-y: auto;
-    padding: 1rem;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0;
   }
 
   .selection-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 1rem;
-    background: var(--cosmic-surface-alt);
-    border-top: 1px solid var(--cosmic-border);
+    padding: 0.4rem 0.75rem;
+    background: var(--card-bg-color);
+    border-top: 1px solid var(--border-color);
     font-size: 12px;
-  }
-
-  .btn-clear {
-    color: var(--cosmic-accent);
   }
 
   .context-menu {
     position: fixed;
     z-index: 1000;
-    background: var(--cosmic-surface);
-    border: 1px solid var(--cosmic-border);
-    border-radius: var(--radius-m);
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-l);
     padding: 0.25rem;
     display: flex;
     flex-direction: column;
     min-width: 160px;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
   }
 
   .context-menu button {
     text-align: left;
     padding: 0.5rem 0.75rem;
     border-radius: var(--radius-s);
-    color: var(--cosmic-text);
+    color: var(--view-fg-color);
+    border: none;
+    background: transparent;
   }
 
   .context-menu button:hover {
-    background: var(--cosmic-surface-alt);
+    background: var(--row-hover-bg-color);
   }
 
+  /* Dialog/Modal - GNOME HIG compliant */
   .modal-overlay {
     position: fixed;
     inset: 0;
@@ -432,58 +431,51 @@
     align-items: center;
     justify-content: center;
     z-index: 1100;
+    backdrop-filter: blur(2px);
   }
 
   .modal {
-    background: var(--cosmic-surface);
-    border: 1px solid var(--cosmic-border);
-    border-radius: var(--radius-l);
-    padding: 1rem;
-    width: min(420px, 90vw);
+    background: var(--dialog-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 360px;
+    max-width: 480px;
+    width: min(480px, 90vw);
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 18px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--dialog-fg-color);
+    margin: 0;
   }
 
   .modal textarea {
     width: 100%;
-    background: var(--cosmic-surface-alt);
-    border: 1px solid var(--cosmic-border);
-    border-radius: var(--radius-m);
-    color: var(--cosmic-text);
-    padding: 0.5rem;
+    background: var(--entry-bg-color);
+    border: 1px solid var(--entry-border-color);
+    border-radius: var(--radius-s);
+    color: var(--view-fg-color);
+    padding: 8px 12px;
+    font-size: 13px;
+    min-height: 80px;
   }
 
   .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 0.5rem;
-  }
-
-  .btn-primary {
-    background: var(--cosmic-accent);
-    color: #ffffff;
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-m);
-  }
-
-  .btn-secondary {
-    background: var(--cosmic-surface-alt);
-    color: var(--cosmic-text);
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-m);
-  }
-
-  .btn-danger {
-    background: #b94a4a;
-    color: #fff;
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-m);
+    gap: 12px;
+    margin-top: 6px;
   }
 
   .error {
     font-size: 12px;
-    color: var(--cosmic-danger);
+    color: var(--destructive-bg-color);
   }
 
   .empty {
@@ -491,6 +483,6 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 </style>

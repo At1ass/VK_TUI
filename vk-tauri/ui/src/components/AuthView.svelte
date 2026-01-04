@@ -64,10 +64,10 @@
       />
 
       <div class="button-row">
-        <button class="btn-secondary" on:click={openAuthUrl} disabled={loading}>
+        <button class="button" on:click={openAuthUrl} disabled={loading}>
           Открыть OAuth
         </button>
-        <button class="btn-primary" on:click={handleSubmit} disabled={loading}>
+        <button class="button suggested" on:click={handleSubmit} disabled={loading}>
           {loading ? 'Вход...' : 'Войти'}
         </button>
       </div>
@@ -86,29 +86,29 @@
     justify-content: center;
     width: 100%;
     height: 100vh;
-    background: var(--cosmic-bg);
+    background: var(--window-bg-color);
   }
 
   .auth-card {
-    background: var(--cosmic-surface);
-    border: 1px solid var(--cosmic-border);
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-l);
     padding: 2rem;
     width: 90%;
     max-width: 500px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   }
 
   h1 {
-    font-size: 32px;
+    font-size: 20px;
     font-weight: 600;
     margin-bottom: 1rem;
     text-align: center;
-    color: var(--cosmic-text);
+    color: var(--window-fg-color);
   }
 
   .hint {
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
     text-align: center;
     margin-bottom: 1.5rem;
     font-size: 14px;
@@ -116,11 +116,11 @@
 
   .error {
     background: rgba(255, 122, 122, 0.1);
-    border: 1px solid var(--cosmic-danger);
+    border: 1px solid var(--destructive-bg-color);
     border-radius: var(--radius-m);
     padding: 0.75rem;
     margin-bottom: 1rem;
-    color: var(--cosmic-danger);
+    color: var(--destructive-bg-color);
     text-align: center;
   }
 
@@ -131,17 +131,17 @@
   }
 
   input {
-    background: var(--cosmic-surface-alt);
-    border: 1px solid var(--cosmic-border);
-    border-radius: var(--radius-m);
+    background: var(--entry-bg-color);
+    border: 1px solid var(--entry-border-color);
+    border-radius: var(--radius-s);
     padding: 0.75rem 1rem;
-    color: var(--cosmic-text);
+    color: var(--view-fg-color);
     font-size: 14px;
     transition: border-color 0.2s;
   }
 
   input:focus {
-    border-color: var(--cosmic-accent);
+    border-color: var(--accent-bg-color);
   }
 
   input:disabled {
@@ -154,31 +154,10 @@
     gap: 0.75rem;
   }
 
-  button {
-    padding: 0.75rem 1.5rem;
-    border-radius: var(--radius-m);
-    font-weight: 600;
-    transition: all 0.2s;
+  .button-row :global(.button) {
     flex: 1;
-  }
-
-  .btn-primary {
-    background: var(--cosmic-accent);
-    color: #ffffff;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: #2f76cf;
-  }
-
-  .btn-secondary {
-    background: var(--cosmic-surface-alt);
-    border: 1px solid var(--cosmic-border);
-    color: var(--cosmic-text);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--cosmic-surface);
+    padding: 0.65rem 1.2rem;
+    font-weight: 600;
   }
 
   button:disabled {
@@ -189,7 +168,7 @@
   .help {
     margin-top: 1.5rem;
     font-size: 12px;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
     text-align: center;
   }
 </style>

@@ -14,9 +14,15 @@ impl App {
         if app.auth.is_authenticated()
             && let Some(token) = app.auth.access_token()
         {
-            app.vk_client = Some(Arc::new(VkClient::new(token.to_string())));
-            app.screen = Screen::Main;
-            app.status = Some("Restoring session...".into());
+            if app.auth.is_token_expired() {
+                let _ = app.auth.logout();
+                app.screen = Screen::Auth;
+                app.status = Some("Session expired. Please authorize again.".into());
+            } else {
+                app.vk_client = Some(Arc::new(VkClient::new(token.to_string())));
+                app.screen = Screen::Main;
+                app.status = Some("Restoring session...".into());
+            }
         }
 
         app

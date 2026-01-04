@@ -13,7 +13,7 @@ fn get_test_token() -> String {
     config_path.push(".config/vk_tui/token.json");
 
     let content = std::fs::read_to_string(&config_path)
-        .expect(&format!("Cannot read token from {:?}", config_path));
+        .unwrap_or_else(|_| panic!("Cannot read token from {:?}", config_path));
 
     let json: serde_json::Value = serde_json::from_str(&content).expect("Cannot parse token.json");
 
@@ -29,7 +29,7 @@ fn get_test_user_id() -> i64 {
     config_path.push(".config/vk_tui/token.json");
 
     let content = std::fs::read_to_string(&config_path)
-        .expect(&format!("Cannot read token from {:?}", config_path));
+        .unwrap_or_else(|_| panic!("Cannot read token from {:?}", config_path));
 
     let json: serde_json::Value = serde_json::from_str(&content).expect("Cannot parse token.json");
 
@@ -37,7 +37,7 @@ fn get_test_user_id() -> i64 {
 }
 
 /// Get current user ID
-async fn get_current_user_id(client: &VkClient) -> i64 {
+async fn get_current_user_id(_client: &VkClient) -> i64 {
     // Use stored user_id from token
     get_test_user_id()
 }
@@ -79,7 +79,7 @@ async fn test_get_conversations() {
             }
 
             assert!(
-                response.items.len() > 0,
+                !response.items.is_empty(),
                 "Should have at least one conversation"
             );
         }
@@ -100,7 +100,7 @@ async fn test_get_current_user() {
 
     match result {
         Ok(users) => {
-            assert!(users.len() > 0, "Should return user");
+            assert!(!users.is_empty(), "Should return user");
             let user = &users[0];
             println!(
                 "✓ Current user: {} {} (ID: {})",
@@ -334,9 +334,10 @@ async fn test_edit_message() {
 
     // Edit the message using the cmid we got from send
     let new_text = format!("EDITED - {}", chrono::Utc::now().format("%H:%M:%S"));
+    let cmid = (sent.conversation_message_id > 0).then_some(sent.conversation_message_id);
     let edit_result = client
         .messages()
-        .edit(user_id, sent.conversation_message_id, &new_text)
+        .edit(user_id, sent.message_id, cmid, &new_text)
         .await;
 
     match edit_result {

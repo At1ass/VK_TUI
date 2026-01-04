@@ -1,7 +1,9 @@
 //! Search-related types.
 
+use serde::{Serialize, Deserialize};
+
 /// Search result item.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub message_id: i64,
     pub peer_id: i64,

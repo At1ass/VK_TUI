@@ -32,8 +32,10 @@ pub fn view(app: &App, frame: &mut Frame) {
     }
 
     // Render command completion popup on top if visible
-    if !matches!(app.completion_state, crate::state::CompletionState::Inactive)
-        && app.mode == Mode::Command
+    if !matches!(
+        app.completion_state,
+        crate::state::CompletionState::Inactive
+    ) && app.mode == Mode::Command
     {
         render_command_completion(app, frame);
     }
@@ -583,8 +585,8 @@ fn render_forward_popup(app: &App, frame: &mut Frame) {
     };
 
     let area = frame.area();
-    let width = (area.width as f32 * 0.7).max(40.0).min(100.0) as u16;
-    let height = (area.height as f32 * 0.7).max(12.0).min(30.0) as u16;
+    let width = (area.width as f32 * 0.7).clamp(40.0, 100.0) as u16;
+    let height = (area.height as f32 * 0.7).clamp(12.0, 30.0) as u16;
     let popup_area = centered_rect(width, height, area);
 
     frame.render_widget(Clear, popup_area);
@@ -697,8 +699,8 @@ fn render_forward_view_popup(app: &App, frame: &mut Frame) {
     };
 
     let area = frame.area();
-    let width = (area.width as f32 * 0.7).max(50.0).min(110.0) as u16;
-    let height = (area.height as f32 * 0.7).max(12.0).min(30.0) as u16;
+    let width = (area.width as f32 * 0.7).clamp(50.0, 110.0) as u16;
+    let height = (area.height as f32 * 0.7).clamp(12.0, 30.0) as u16;
     let popup_area = centered_rect(width, height, area);
 
     frame.render_widget(Clear, popup_area);
@@ -871,14 +873,21 @@ fn render_command_completion(app: &App, frame: &mut Frame) {
 
     // FSM pattern matching on state
     match &app.completion_state {
-        CompletionState::Inactive => return,
-        CompletionState::Commands { suggestions, selected } => {
+        CompletionState::Inactive => (),
+        CompletionState::Commands {
+            suggestions,
+            selected,
+        } => {
             render_command_suggestions(suggestions, *selected, frame);
         }
-        CompletionState::Subcommands { options, selected, .. } => {
+        CompletionState::Subcommands {
+            options, selected, ..
+        } => {
             render_subcommand_suggestions(options, *selected, frame);
         }
-        CompletionState::FilePaths { entries, selected, .. } => {
+        CompletionState::FilePaths {
+            entries, selected, ..
+        } => {
             render_filepath_suggestions(entries, *selected, frame);
         }
     }
@@ -980,11 +989,7 @@ fn render_subcommand_suggestions(
     let area = frame.area();
 
     // Calculate popup size
-    let max_name_len = options
-        .iter()
-        .map(|o| o.name.len())
-        .max()
-        .unwrap_or(10);
+    let max_name_len = options.iter().map(|o| o.name.len()).max().unwrap_or(10);
     let max_desc_len = options
         .iter()
         .map(|o| o.description.len())
@@ -1066,7 +1071,7 @@ fn render_filepath_suggestions(
     let width = (max_name_len + 6).min(60) as u16;
 
     // Height: limit to reasonable number
-    let height = ((entries.len() as u16).min(15) + 2); // +2 for borders
+    let height = (entries.len() as u16).min(15) + 2; // +2 for borders
 
     // Position: bottom-left, above status line
     let popup_area = Rect {
@@ -1156,11 +1161,7 @@ fn render_global_search_popup(app: &App, frame: &mut Frame) {
     let input_text = if search.is_loading {
         format!("🔍 {} (searching...)", search.query)
     } else {
-        format!(
-            "🔍 {} ({} results)",
-            search.query,
-            search.total_count
-        )
+        format!("🔍 {} ({} results)", search.query, search.total_count)
     };
 
     let input_widget = Paragraph::new(input_text)
@@ -1206,10 +1207,7 @@ fn render_global_search_popup(app: &App, frame: &mut Frame) {
                     Span::raw(" • "),
                     Span::styled(timestamp, Style::default().fg(Color::DarkGray)),
                 ]),
-                Line::from(Span::styled(
-                    preview,
-                    Style::default().fg(Color::White),
-                )),
+                Line::from(Span::styled(preview, Style::default().fg(Color::White))),
             ];
 
             ListItem::new(lines)
@@ -1240,4 +1238,3 @@ fn render_global_search_popup(app: &App, frame: &mut Frame) {
     frame.render_widget(Clear, chunks[1]);
     frame.render_stateful_widget(results_widget, chunks[1], &mut list_state);
 }
-

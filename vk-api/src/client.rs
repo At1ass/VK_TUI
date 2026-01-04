@@ -64,6 +64,10 @@ impl VkClient {
         );
 
         let vk_response: VkResponse<T> = serde_json::from_str(&text).map_err(|e| {
+            // Log full body on parse error for debugging
+            tracing::error!("Failed to parse VK API response for {}: {}", method, e);
+            tracing::debug!("Full response body: {}", text);
+
             anyhow::anyhow!(
                 "{}: failed to parse response (status {}): {}; body: {}",
                 method,

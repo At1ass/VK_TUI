@@ -10,6 +10,23 @@ use crate::mapper::{map_attachment, map_history_message, map_reply};
 use crate::message::Message;
 use crate::state::AttachmentInfo;
 
+pub async fn validate_session(client: Arc<VkClient>, tx: mpsc::UnboundedSender<Message>) {
+    match client.account().get_profile_info().await {
+        Ok(_) => {
+            let _ = tx.send(Message::SessionValidated {
+                valid: true,
+                error: None,
+            });
+        }
+        Err(e) => {
+            let _ = tx.send(Message::SessionValidated {
+                valid: false,
+                error: Some(format!("Session validation failed: {}", e)),
+            });
+        }
+    }
+}
+
 pub async fn load_conversations(
     client: Arc<VkClient>,
     offset: u32,
@@ -140,6 +157,53 @@ pub async fn load_messages_around(
                 "Failed to load messages around target: {}",
                 e
             )));
+        }
+    }
+}
+
+/// Load messages with offset from a specific message
+/// Used for pagination (negative offset = older messages, positive = newer)
+pub async fn load_messages_with_offset(
+    client: Arc<VkClient>,
+    peer_id: i64,
+    start_message_id: i64,
+    offset: i32,
+    count: u32,
+    tx: mpsc::UnboundedSender<Message>,
+) {
+    match client
+        .messages()
+        .get_history_with_offset(peer_id, start_message_id, offset, count)
+        .await
+    {
+        Ok(response) => {
+            let total_count = response.count as u32;
+            let loaded_count = response.items.len() as u32;
+            let has_more = loaded_count == count; // Has more if we got full page
+
+            let out_read = response
+                .conversations
+                .first()
+                .and_then(|c| c.out_read)
+                .unwrap_or(0);
+
+            let messages: Vec<crate::state::ChatMessage> = response
+                .items
+                .into_iter()
+                .rev()
+                .map(|msg| map_history_message(&response.profiles, &msg, out_read))
+                .collect();
+
+            let _ = tx.send(Message::MessagesLoaded {
+                peer_id,
+                messages,
+                profiles: response.profiles,
+                total_count,
+                has_more,
+            });
+        }
+        Err(e) => {
+            let _ = tx.send(Message::Error(format!("Failed to load messages: {}", e)));
         }
     }
 }

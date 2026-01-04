@@ -1,9 +1,19 @@
-//! Application state types split out of app.rs for readability.
+//! Application state types for TUI.
+//!
+//! This module re-exports core types from vk-core and defines
+//! TUI-specific state types.
+
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
 use vk_api::User;
 use vk_api::auth::AuthManager;
+
+// Re-export core types
+pub use vk_core::{
+    AttachmentInfo, AttachmentKind, Chat, ChatMessage, ChatsPagination, DeliveryStatus,
+    ForwardItem, MessagesPagination, ReplyPreview, SearchResult,
+};
 
 /// Current screen
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -57,133 +67,16 @@ pub enum RunningState {
     Done,
 }
 
-/// A chat/conversation in the list
-#[derive(Debug, Clone)]
-pub struct Chat {
-    pub id: i64,
-    pub title: String,
-    pub last_message: String,
-    #[allow(dead_code)]
-    pub last_message_time: i64,
-    pub unread_count: u32,
-    pub is_online: bool,
-}
-
-/// Delivery state for messages
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DeliveryStatus {
-    Pending,
-    Sent,
-    Failed,
-}
-
-/// Attachment summary for UI/commands
-#[derive(Debug, Clone)]
-pub struct AttachmentInfo {
-    pub kind: AttachmentKind,
-    pub title: String,
-    pub url: Option<String>,
-    pub size: Option<u64>,
-    pub subtitle: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub enum AttachmentKind {
-    Photo,
-    Doc,
-    Link,
-    Audio,
-    Sticker,
-    Other(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct ReplyPreview {
-    pub from: String,
-    pub text: String,
-    pub attachments: Vec<AttachmentInfo>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ForwardItem {
-    pub from: String,
-    pub text: String,
-    pub attachments: Vec<AttachmentInfo>,
-    pub nested: Vec<ForwardItem>,
-}
-
-/// A single message
-#[derive(Debug, Clone)]
-pub struct ChatMessage {
-    pub id: i64,
-    pub cmid: Option<i64>,
-    #[allow(dead_code)]
-    pub from_id: i64,
-    pub from_name: String,
-    pub text: String,
-    pub timestamp: i64,
-    pub is_outgoing: bool,
-    pub is_read: bool,
-    pub is_edited: bool,
-    pub is_pinned: bool,
-    pub delivery: DeliveryStatus,
-    pub attachments: Vec<AttachmentInfo>,
-    pub reply: Option<ReplyPreview>,
-    pub fwd_count: usize,
-    pub forwards: Vec<ForwardItem>,
-}
-
 /// Async actions to be performed in background
-
-/// Pagination state for messages in a specific chat
-#[derive(Debug, Clone)]
-pub struct MessagesPagination {
-    pub peer_id: i64,
-    pub offset: u32,
-    pub total_count: Option<u32>,
-    pub is_loading: bool,
-    pub has_more: bool,
-}
-
-impl MessagesPagination {
-    pub fn new(peer_id: i64) -> Self {
-        Self {
-            peer_id,
-            offset: 0,
-            total_count: None,
-            is_loading: false,
-            has_more: true,
-        }
-    }
-}
-
-/// Pagination state for chat list
-#[derive(Debug, Clone)]
-pub struct ChatsPagination {
-    pub offset: u32,
-    pub total_count: Option<u32>,
-    pub is_loading: bool,
-    pub has_more: bool,
-}
-
-impl Default for ChatsPagination {
-    fn default() -> Self {
-        Self {
-            offset: 0,
-            total_count: None,
-            is_loading: false,
-            has_more: true,
-        }
-    }
-}
-
 pub enum AsyncAction {
-    LoadConversations(u32),             // offset
-    LoadMessages(i64, u32),             // peer_id, offset
-    LoadMessagesAround(i64, i64),       // peer_id, message_id
-    SendMessage(i64, String),           // peer_id, text
-    SendForward(i64, Vec<i64>, String), // peer_id, message_ids, comment
-    SendReply(i64, i64, String),        // peer_id, reply_to_msg_id, text
+    ValidateSession,
+    LoadConversations(u32),                     // offset
+    LoadMessages(i64, u32),                     // peer_id, offset
+    LoadMessagesAround(i64, i64),               // peer_id, message_id
+    LoadMessagesWithOffset(i64, i64, i32, u32), // peer_id, start_message_id, offset, count
+    SendMessage(i64, String),                   // peer_id, text
+    SendForward(i64, Vec<i64>, String),         // peer_id, message_ids, comment
+    SendReply(i64, i64, String),                // peer_id, reply_to_msg_id, text
     StartLongPoll,
     MarkAsRead(i64),
     SendPhoto(i64, String), // peer_id, path
@@ -192,8 +85,8 @@ pub enum AsyncAction {
     EditMessage(i64, i64, Option<i64>, String), // peer_id, message_id, cmid, text
     #[allow(dead_code)]
     DeleteMessage(i64, i64, bool), // peer_id, message_id, delete_for_all
-    FetchMessageById(i64),          // message_id - to get cmid after sending
-    SearchMessages(String),         // query
+    FetchMessageById(i64),                      // message_id - to get cmid after sending
+    SearchMessages(String),                     // query
 }
 
 /// Chat filter state for local fuzzy search
@@ -201,7 +94,7 @@ pub enum AsyncAction {
 pub struct ChatFilter {
     pub query: String,
     pub cursor: usize,
-    pub filtered_indices: Vec<usize>, // indices of matching chats
+    pub filtered_indices: Vec<usize>,
 }
 
 impl ChatFilter {
@@ -212,18 +105,6 @@ impl ChatFilter {
             filtered_indices: Vec::new(),
         }
     }
-}
-
-/// Search result item
-#[derive(Debug, Clone)]
-pub struct SearchResult {
-    pub message_id: i64,
-    pub peer_id: i64,
-    pub from_id: i64,
-    pub from_name: String,
-    pub chat_title: String,
-    pub text: String,
-    pub timestamp: i64,
 }
 
 /// Global search state
@@ -277,7 +158,7 @@ pub struct App {
     pub current_peer_id: Option<i64>,
     pub messages: Vec<ChatMessage>,
     pub messages_scroll: usize,
-    pub target_message_id: Option<i64>, // Message to scroll to after loading
+    pub target_message_id: Option<i64>,
     pub reply_to: Option<(i64, ReplyPreview)>,
 
     // Search and filter state
@@ -388,26 +269,26 @@ pub struct SubcommandOption {
 /// File system entry for path completion
 #[derive(Debug, Clone)]
 pub struct PathEntry {
-    pub name: String,        // "file.jpg"
-    pub full_path: String,   // "/home/user/file.jpg"
+    pub name: String,
+    pub full_path: String,
     pub is_dir: bool,
 }
 
 /// Completion state machine
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub enum CompletionState {
     /// No completion active
+    #[default]
     Inactive,
 
     /// Completing command names
-    /// Example: ":att|ach"
     Commands {
         suggestions: Vec<CommandSuggestion>,
         selected: usize,
     },
 
     /// Completing subcommands
-    /// Example: ":attach |photo"
     Subcommands {
         command: String,
         options: Vec<SubcommandOption>,
@@ -415,17 +296,10 @@ pub enum CompletionState {
     },
 
     /// Completing file paths
-    /// Example: ":attach photo |/home/user/file.jpg"
     FilePaths {
-        context: String,         // "attach photo"
-        base_path: String,       // "/home/user"
+        context: String,
+        base_path: String,
         entries: Vec<PathEntry>,
         selected: usize,
     },
-}
-
-impl Default for CompletionState {
-    fn default() -> Self {
-        Self::Inactive
-    }
 }

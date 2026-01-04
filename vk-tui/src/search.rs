@@ -65,9 +65,7 @@ pub fn filter_chats(chats: &[crate::state::Chat], query: &str) -> Vec<usize> {
     let mut matches: Vec<(usize, i32)> = chats
         .iter()
         .enumerate()
-        .filter_map(|(idx, chat)| {
-            fuzzy_match(&chat.title, query).map(|score| (idx, score))
-        })
+        .filter_map(|(idx, chat)| fuzzy_match(&chat.title, query).map(|score| (idx, score)))
         .collect();
 
     // Sort by score (descending)

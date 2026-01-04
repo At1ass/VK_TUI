@@ -1,7 +1,9 @@
 //! Attachment types for messages.
 
+use serde::{Serialize, Deserialize};
+
 /// Summary information about an attachment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttachmentInfo {
     pub kind: AttachmentKind,
     pub title: String,
@@ -11,7 +13,7 @@ pub struct AttachmentInfo {
 }
 
 /// Type of attachment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AttachmentKind {
     Photo,
     Doc,

@@ -1,7 +1,6 @@
 <script>
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { open } from '@tauri-apps/plugin-shell';
   import AuthView from './components/AuthView.svelte';
   import MainView from './components/MainView.svelte';
 
@@ -57,7 +56,7 @@
       <p>Загрузка...</p>
     </div>
   {:else if !authenticated}
-    <AuthView {error} onLogin={handleLogin} />
+    <AuthView externalError={error} onLogin={handleLogin} />
   {:else}
     <MainView onLogout={handleLogout} />
   {/if}
@@ -82,8 +81,8 @@
   .spinner {
     width: 40px;
     height: 40px;
-    border: 4px solid var(--cosmic-surface-alt);
-    border-top-color: var(--cosmic-accent);
+    border: 4px solid var(--card-bg-color);
+    border-top-color: var(--accent-bg-color);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }

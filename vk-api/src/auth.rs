@@ -57,11 +57,35 @@ impl AuthManager {
         self.token.as_ref().map(|t| t.user_id)
     }
 
+    /// Get token expiration timestamp (unix seconds)
+    pub fn expires_at(&self) -> Option<i64> {
+        self.token.as_ref().and_then(|t| t.expires_at)
+    }
+
+    /// Check if token is expired (non-expiring tokens return false)
+    pub fn is_token_expired(&self) -> bool {
+        match self.expires_at() {
+            Some(expires_at) => {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                expires_at <= now
+            }
+            None => false,
+        }
+    }
+
     /// Generate OAuth URL for user to authenticate
     pub fn get_auth_url() -> String {
+        Self::get_auth_url_with_redirect("https://oauth.vk.com/blank.html")
+    }
+
+    /// Generate OAuth URL with a custom redirect URI.
+    pub fn get_auth_url_with_redirect(redirect_uri: &str) -> String {
         format!(
-            "{}?client_id={}&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=messages,friends,photos,offline&response_type=token&v={}",
-            VK_AUTH_URL, VK_APP_ID, VK_API_VERSION
+            "{}?client_id={}&display=page&redirect_uri={}&scope=messages,friends,photos,offline&response_type=token&v={}",
+            VK_AUTH_URL, VK_APP_ID, redirect_uri, VK_API_VERSION
         )
     }
 
@@ -102,12 +126,18 @@ impl AuthManager {
         let access_token = access_token.context("No access_token in URL")?;
         let user_id = user_id.context("No user_id in URL")?;
 
-        let expires_at = expires_in.map(|e| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64
-                + e
+        let expires_at = expires_in.and_then(|e| {
+            if e == 0 {
+                None
+            } else {
+                Some(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs() as i64
+                        + e,
+                )
+            }
         });
 
         let token = TokenData {

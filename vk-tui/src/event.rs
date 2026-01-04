@@ -5,6 +5,9 @@ use crossterm::event::{Event as CrosstermEvent, EventStream, KeyEvent, MouseEven
 use futures::{FutureExt, StreamExt};
 use tokio::sync::mpsc;
 
+// Re-export VkEvent from vk-core
+pub use vk_core::VkEvent;
+
 /// Terminal events
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -19,27 +22,6 @@ pub enum Event {
     Resize(u16, u16),
     /// VK event (new message, etc.)
     Vk(VkEvent),
-}
-
-/// Events from VK API
-#[derive(Debug, Clone)]
-pub enum VkEvent {
-    /// New message received
-    NewMessage {
-        peer_id: i64,
-        text: String,
-        from_id: i64,
-    },
-    /// Message read
-    MessageRead { peer_id: i64, message_id: i64 },
-    /// Message edited (from Long Poll)
-    MessageEditedFromLongPoll { peer_id: i64, message_id: i64 },
-    /// Message deleted (from Long Poll)
-    MessageDeletedFromLongPoll { peer_id: i64, message_id: i64 },
-    /// User typing
-    UserTyping { peer_id: i64, user_id: i64 },
-    /// Connection status changed
-    ConnectionStatus(bool),
 }
 
 /// Event handler that polls for terminal and VK events

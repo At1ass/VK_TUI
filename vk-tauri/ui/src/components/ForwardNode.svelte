@@ -13,7 +13,7 @@
 
 <div class="forward-node" style={`padding-left: ${level * 12}px`}>
   <div class="forward-header">
-    <button class="toggle" on:click={toggle} disabled={!item.nested || item.nested.length === 0}>
+    <button class="button flat toggle" on:click={toggle} disabled={!item.nested || item.nested.length === 0}>
       {#if item.nested && item.nested.length > 0}
         {open ? '▾' : '▸'}
       {:else}
@@ -47,7 +47,7 @@
     flex-direction: column;
     gap: 0.25rem;
     padding: 0.35rem 0.5rem;
-    border-left: 1px solid var(--cosmic-border);
+    border-left: 1px solid var(--border-color);
   }
 
   .forward-header {
@@ -55,20 +55,19 @@
     align-items: center;
     gap: 0.4rem;
     font-size: 11px;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
   .toggle {
     width: 18px;
     height: 18px;
     border-radius: var(--radius-s);
-    background: var(--cosmic-surface-alt);
-    border: 1px solid var(--cosmic-border);
-    color: var(--cosmic-text);
+    color: var(--view-fg-color);
     font-size: 10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 0;
   }
 
   .toggle:disabled {
@@ -81,7 +80,7 @@
 
   .forward-text {
     font-size: 12px;
-    color: var(--cosmic-text);
+    color: var(--view-fg-color);
   }
 
   .forward-attachments {
@@ -94,8 +93,8 @@
     font-size: 10px;
     padding: 0.1rem 0.4rem;
     border-radius: 999px;
-    background: var(--cosmic-surface-alt);
-    border: 1px solid var(--cosmic-border);
-    color: var(--cosmic-muted);
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--muted-fg-color);
   }
 </style>

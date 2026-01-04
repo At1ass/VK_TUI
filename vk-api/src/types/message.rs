@@ -16,10 +16,20 @@ pub struct SentMessage {
 /// Message
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {
+    /// Message ID (may be absent in forwarded messages)
+    #[serde(default)]
     pub id: i64,
+
+    #[serde(default)]
     pub from_id: i64,
+
+    #[serde(default)]
     pub peer_id: i64,
+
+    #[serde(default)]
     pub date: i64,
+
+    #[serde(default)]
     pub text: String,
 
     #[serde(default)]

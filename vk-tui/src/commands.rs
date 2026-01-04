@@ -1,7 +1,7 @@
 //! Parser for command mode (colon-commands).
 use crate::state::{
-    App, AsyncAction, AttachmentInfo, CommandSuggestion, CompletionState, Focus,
-    PathEntry, SubcommandOption,
+    App, AsyncAction, AttachmentInfo, CommandSuggestion, CompletionState, Focus, PathEntry,
+    SubcommandOption,
 };
 
 pub fn handle_command(app: &mut App, cmd: &str) -> Option<crate::message::Message> {
@@ -216,7 +216,7 @@ fn generate_filepath_completions(input: &str, base: &str) -> CompletionState {
 
     // Expand ~ to home directory
     let expanded_input = if input.starts_with('~') {
-        if let Some(home) = std::env::var("HOME").ok() {
+        if let Ok(home) = std::env::var("HOME") {
             input.replacen('~', &home, 1)
         } else {
             input.to_string()

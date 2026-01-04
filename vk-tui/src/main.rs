@@ -82,6 +82,9 @@ fn spawn_action_handler(
             let tx = message_tx.clone();
 
             match action {
+                AsyncAction::ValidateSession => {
+                    tokio::spawn(actions::validate_session(client, tx));
+                }
                 AsyncAction::LoadConversations(offset) => {
                     tokio::spawn(actions::load_conversations(client, offset, tx));
                 }
@@ -89,7 +92,19 @@ fn spawn_action_handler(
                     tokio::spawn(actions::load_messages(client, peer_id, offset, tx));
                 }
                 AsyncAction::LoadMessagesAround(peer_id, message_id) => {
-                    tokio::spawn(actions::load_messages_around(client, peer_id, message_id, tx));
+                    tokio::spawn(actions::load_messages_around(
+                        client, peer_id, message_id, tx,
+                    ));
+                }
+                AsyncAction::LoadMessagesWithOffset(peer_id, start_message_id, offset, count) => {
+                    tokio::spawn(actions::load_messages_with_offset(
+                        client,
+                        peer_id,
+                        start_message_id,
+                        offset,
+                        count,
+                        tx,
+                    ));
                 }
                 AsyncAction::SendMessage(peer_id, text) => {
                     tokio::spawn(actions::send_message(client, peer_id, text, tx));
@@ -269,6 +284,16 @@ async fn mark_as_read(client: Arc<VkClient>, peer_id: i64, tx: mpsc::UnboundedSe
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize tracing to write to file
+    let log_file = std::fs::File::create("vk_tui.log")?;
+    tracing_subscriber::fmt()
+        .with_writer(log_file)
+        .with_ansi(false)
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
+    tracing::info!("Starting vk-tui application");
+
     // Setup panic hook
     setup_panic_hook();
 
@@ -287,12 +312,10 @@ async fn main() -> Result<()> {
     // Spawn action handler with current VK client
     spawn_action_handler(action_rx, message_tx.clone(), app.vk_client.clone());
 
-    // If already authenticated, load conversations
+    // If already authenticated, validate session before loading
     if app.vk_client.is_some() {
         app.is_loading = true;
-        app.chats_pagination.is_loading = true;
-        app.send_action(AsyncAction::LoadConversations(0));
-        app.send_action(AsyncAction::StartLongPoll);
+        app.send_action(AsyncAction::ValidateSession);
     }
 
     // Create event handler

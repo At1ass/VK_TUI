@@ -29,6 +29,8 @@
   let lastLoadAt = 0;
   let paginationAnchorId = null;
   let paginationOffset = 0;
+  let searchBarVisible = false;
+  let sidebarRevealed = false;
 
   onMount(async () => {
     try {
@@ -237,6 +239,22 @@
     }
   }
 
+  function toggleSearchBar() {
+    searchBarVisible = !searchBarVisible;
+    if (!searchBarVisible) {
+      searchQuery = '';
+      searchOpen = false;
+    }
+  }
+
+  function toggleSidebar() {
+    sidebarRevealed = !sidebarRevealed;
+  }
+
+  function closeSidebar() {
+    sidebarRevealed = false;
+  }
+
   async function handleSearch() {
     const query = searchQuery.trim();
     if (!query) return;
@@ -425,38 +443,89 @@
 </script>
 
 <div class="main-view">
-  <header class="header">
-    <h2>Сообщения</h2>
-    <div class="header-right">
-      <div class="search-box">
-        <input
-          type="text"
-          placeholder="Поиск сообщений..."
-          bind:value={searchQuery}
-          on:keypress={(e) => e.key === 'Enter' && handleSearch()}
-        />
-        <label class="search-scope">
-          <input type="checkbox" bind:checked={searchInChat} disabled={!selectedChat} />
-          В чате
-        </label>
-        <button class="btn-search" on:click={handleSearch}>
-          Найти
-        </button>
-      </div>
-      <span class="status">{status}</span>
-      <button class="btn-logout" on:click={onLogout}>
-        Выйти
+  <header class="headerbar" data-tauri-drag-region>
+    <div class="headerbar-start">
+      <button
+        class="button flat icon-button sidebar-toggle"
+        on:click={toggleSidebar}
+        title="Показать чаты"
+        aria-label="Показать чаты"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h12v2H2v-2z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="headerbar-center" data-tauri-drag-region>
+      <h1 class="headerbar-title">Сообщения</h1>
+      {#if status && status !== 'Готово'}
+        <span class="headerbar-subtitle">{status}</span>
+      {/if}
+    </div>
+
+    <div class="headerbar-end">
+      <button
+        class="button flat icon-button"
+        on:click={toggleSearchBar}
+        title="Поиск (Ctrl+F)"
+        aria-label="Поиск"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M6.5 1C3.46 1 1 3.46 1 6.5S3.46 12 6.5 12c1.41 0 2.69-.53 3.66-1.41l3.63 3.63 1.41-1.41-3.63-3.63C12.47 8.19 13 6.91 13 5.5 13 2.46 10.54 0 7.5 0zm0 2c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4 1.79-4 4-4z"/>
+        </svg>
+      </button>
+      <button
+        class="button flat icon-button"
+        on:click={onLogout}
+        title="Выйти"
+        aria-label="Выйти"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M3 2v12h5v-2H5V4h3V2H3zm7 2l-1.5 1.5L11 8H6v2h5l-2.5 2.5L10 14l5-5-5-5z"/>
+        </svg>
       </button>
     </div>
   </header>
 
+  {#if searchBarVisible}
+    <div class="search-bar">
+      <input
+        type="search"
+        class="search-input"
+        placeholder="Поиск сообщений..."
+        bind:value={searchQuery}
+        on:keypress={(e) => e.key === 'Enter' && handleSearch()}
+      />
+      <label class="search-scope">
+        <input type="checkbox" bind:checked={searchInChat} disabled={!selectedChat} />
+        В текущем чате
+      </label>
+      <button class="button suggested" on:click={handleSearch}>
+        Найти
+      </button>
+      <button class="button flat" on:click={toggleSearchBar}>
+        Закрыть
+      </button>
+    </div>
+  {/if}
+
   <div class="content">
-    <ChatList
-      {chats}
-      {loading}
-      selectedChatId={selectedChat?.id}
-      onSelectChat={handleChatSelect}
-    />
+    <div class="sidebar-container" class:revealed={sidebarRevealed}>
+      <ChatList
+        {chats}
+        {loading}
+        selectedChatId={selectedChat?.id}
+        onSelectChat={(chat) => {
+          handleChatSelect(chat);
+          closeSidebar();
+        }}
+      />
+    </div>
+
+    {#if sidebarRevealed}
+      <div class="sidebar-overlay" on:click={closeSidebar}></div>
+    {/if}
 
     {#if selectedChat}
       <MessageView
@@ -484,7 +553,7 @@
     <div class="search-panel">
       <div class="search-panel-header">
         <span>Результаты поиска ({searchTotal})</span>
-        <button class="btn-clear" on:click={() => (searchOpen = false)}>Закрыть</button>
+        <button class="button flat" on:click={() => (searchOpen = false)}>Закрыть</button>
       </div>
       {#if searchLoading}
         <div class="search-state">Поиск...</div>
@@ -518,83 +587,148 @@
     flex-direction: column;
     width: 100%;
     height: 100vh;
-    background: var(--cosmic-bg);
+    background: var(--window-bg-color);
   }
 
-  .header {
+  /* Header Bar - GNOME HIG compliant */
+  .headerbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    min-height: 46px;
+    background: var(--headerbar-bg-color);
+    border-bottom: 1px solid var(--headerbar-border-color);
+    box-shadow: 0 1px var(--headerbar-shade-color);
+  }
+
+  .headerbar-start,
+  .headerbar-end {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: var(--cosmic-surface);
-    border-bottom: 1px solid var(--cosmic-border);
+    gap: 6px;
   }
 
-  h2 {
-    font-size: 18px;
+  .headerbar-center {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0;
+  }
+
+  .headerbar-title {
+    font-size: 14px;
     font-weight: 600;
+    color: var(--headerbar-fg-color);
+    margin: 0;
   }
 
-  .header-right {
+  .headerbar-subtitle {
+    font-size: 11px;
+    color: var(--muted-fg-color);
+  }
+
+  /* Search Bar - separate from header */
+  .search-bar {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 12px;
+    padding: 6px 12px;
+    background: var(--headerbar-bg-color);
+    border-bottom: 1px solid var(--border-color);
   }
 
-  .search-box {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .search-box input {
-    background: var(--cosmic-surface);
-    border: 1px solid var(--cosmic-border);
-    border-radius: var(--radius-m);
-    padding: 0.4rem 0.6rem;
-    color: var(--cosmic-text);
-    font-size: 12px;
-    min-width: 180px;
+  .search-input {
+    flex: 1;
+    min-width: 0;
   }
 
   .search-scope {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    font-size: 11px;
-    color: var(--cosmic-muted);
-  }
-
-  .btn-search {
-    padding: 0.4rem 0.75rem;
-    background: var(--cosmic-accent);
-    color: #ffffff;
-    border-radius: var(--radius-m);
+    gap: 6px;
     font-size: 12px;
-  }
-
-  .status {
-    font-size: 12px;
-    color: var(--cosmic-muted);
-  }
-
-  .btn-logout {
-    padding: 0.5rem 1rem;
-    background: var(--cosmic-surface);
-    border: 1px solid var(--cosmic-border);
-    border-radius: var(--radius-m);
-    color: var(--cosmic-text);
-    transition: background 0.2s;
-  }
-
-  .btn-logout:hover {
-    background: #202638;
+    color: var(--view-fg-color);
+    white-space: nowrap;
   }
 
   .content {
     display: flex;
     flex: 1;
     overflow: hidden;
+    position: relative;
+  }
+
+  .sidebar-container {
+    display: flex;
+    flex-shrink: 0;
+    width: 25%;
+    min-width: 270px;
+    max-width: 420px;
+  }
+
+  .sidebar-overlay {
+    display: none;
+  }
+
+  /* Mobile toggle button - hidden on desktop */
+  .sidebar-toggle {
+    display: none;
+  }
+
+  /* Responsive Breakpoints - GNOME HIG */
+
+  /* Mobile: < 600px - Collapsed sidebar */
+  @media (max-width: 600px) {
+    .sidebar-toggle {
+      display: inline-flex;
+    }
+
+    .sidebar-container {
+      position: fixed;
+      left: -100%;
+      top: 0;
+      bottom: 0;
+      width: 80%;
+      min-width: unset;
+      max-width: 320px;
+      z-index: 200;
+      transition: left 200ms ease-out;
+      box-shadow: none;
+    }
+
+    .sidebar-container.revealed {
+      left: 0;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar-overlay {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 199;
+    }
+  }
+
+  /* Tablet: 600px - 900px - Narrow sidebar */
+  @media (min-width: 600px) and (max-width: 900px) {
+    .sidebar-container {
+      width: 30%;
+      min-width: 200px;
+      max-width: 280px;
+    }
+  }
+
+  /* Desktop: > 900px - Full layout (default) */
+  @media (min-width: 900px) {
+    .sidebar-container {
+      width: 25%;
+      min-width: 270px;
+      max-width: 420px;
+    }
   }
 
   .empty-state {
@@ -602,23 +736,23 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
   .search-panel {
     position: fixed;
     right: 1rem;
-    top: 4.5rem;
+    top: 4.25rem;
     width: min(360px, 90vw);
     max-height: 70vh;
     overflow: hidden;
-    background: var(--cosmic-surface);
-    border: 1px solid var(--cosmic-border);
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-l);
     display: flex;
     flex-direction: column;
     z-index: 1200;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
   }
 
   .search-panel-header {
@@ -626,38 +760,39 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--cosmic-border);
+    border-bottom: 1px solid var(--border-color);
     font-size: 12px;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
   .search-state {
     padding: 1rem;
     text-align: center;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
   .search-results {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.75rem;
+    gap: 0.25rem;
+    padding: 0.5rem;
   }
 
   .search-result {
     text-align: left;
-    padding: 0.6rem;
-    border-radius: var(--radius-m);
-    background: var(--cosmic-surface-alt);
-    border: 1px solid var(--cosmic-border);
+    padding: 0.55rem 0.7rem;
+    border-radius: var(--radius-s);
+    background: transparent;
+    border: 1px solid transparent;
     display: flex;
     flex-direction: column;
     gap: 0.3rem;
   }
 
   .search-result:hover {
-    border-color: var(--cosmic-accent);
+    background: var(--row-hover-bg-color);
+    border-color: var(--border-color);
   }
 
   .search-title {
@@ -669,11 +804,11 @@
     display: flex;
     justify-content: space-between;
     font-size: 10px;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
   .search-text {
     font-size: 12px;
-    color: var(--cosmic-text);
+    color: var(--view-fg-color);
   }
 </style>

@@ -1,17 +1,101 @@
+/* GNOME Cantarell font - official Adwaita UI font */
+@import url('https://fonts.googleapis.com/css2?family=Cantarell:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+/* Official Libadwaita CSS Variables - Dark Mode
+ * Source: https://gnome.pages.gitlab.gnome.org/libadwaita/doc/1.2/css-variables.html
+ */
 :root {
-  --cosmic-bg: #1e1e1e;
-  --cosmic-surface: #242424;
-  --cosmic-surface-alt: #2c2c2c;
-  --cosmic-border: #3a3a3a;
-  --cosmic-text: #f6f5f4;
-  --cosmic-muted: #c0bfbc;
-  --cosmic-accent: #3584e4;
-  --cosmic-success: #3a944a;
-  --cosmic-danger: #e62d42;
-  --cosmic-selection: #2c5ea8;
+  /* Window & View Colors */
+  --window-bg-color: #222226;
+  --window-fg-color: #ffffff;
+  --view-bg-color: #1d1d20;
+  --view-fg-color: #ffffff;
+
+  /* Header Bar Colors */
+  --headerbar-bg-color: #2e2e32;
+  --headerbar-fg-color: #ffffff;
+  --headerbar-border-color: rgba(255, 255, 255, 0.07);
+  --headerbar-backdrop-color: #222226;
+  --headerbar-shade-color: rgb(0 0 6 / 36%);
+  --headerbar-darker-shade-color: rgb(0 0 6 / 90%);
+
+  /* Sidebar Colors */
+  --sidebar-bg-color: #2e2e32;
+  --sidebar-fg-color: #ffffff;
+  --sidebar-backdrop-color: #28282c;
+  --sidebar-border-color: rgb(0 0 6 / 36%);
+  --sidebar-shade-color: rgb(0 0 6 / 25%);
+
+  /* Card Colors */
+  --card-bg-color: rgb(255 255 255 / 8%);
+  --card-fg-color: #ffffff;
+  --card-shade-color: rgb(0 0 6 / 36%);
+
+  /* Dialog & Popover Colors */
+  --dialog-bg-color: #36363a;
+  --dialog-fg-color: #ffffff;
+  --popover-bg-color: #36363a;
+  --popover-fg-color: #ffffff;
+  --popover-shade-color: rgb(0 0 6 / 25%);
+
+  /* Semantic Colors */
+  --accent-bg-color: #3584e4;
+  --accent-fg-color: #ffffff;
+  --accent-color: #78aeed;
+  --destructive-bg-color: #c01c28;
+  --destructive-fg-color: #ffffff;
+  --destructive-color: #ff938c;
+  --success-bg-color: #26a269;
+  --success-fg-color: #ffffff;
+  --success-color: #78e9ab;
+  --warning-bg-color: #cd9309;
+  --warning-fg-color: rgba(0, 0, 0, 0.8);
+  --warning-color: #ffc252;
+  --error-bg-color: #c01c28;
+  --error-fg-color: #ffffff;
+  --error-color: #ff938c;
+
+  /* Accent Color Variants */
+  --accent-blue: #3584e4;
+  --accent-teal: #2190a4;
+  --accent-green: #3a944a;
+  --accent-yellow: #c88800;
+  --accent-orange: #ed5b00;
+  --accent-red: #e62d42;
+  --accent-pink: #d56199;
+  --accent-purple: #9141ac;
+  --accent-slate: #6f8396;
+
+  /* Miscellaneous */
+  --border-color: rgba(255, 255, 255, 0.07);
+  --shade-color: rgb(0 0 6 / 25%);
+  --scrollbar-outline-color: rgb(0 0 6 / 50%);
+
+  /* Helper Variables */
+  --border-opacity: 50%;
+  --dim-opacity: 90%;
+  --disabled-opacity: 40%;
+
+  /* Window */
+  --window-radius: 15px;
+
+  /* Font Families & Sizes - GNOME Official */
+  --document-font-family: "Cantarell", system-ui, sans-serif;
+  --document-font-size: 12pt;
+  --monospace-font-family: "Source Code Pro", "JetBrains Mono", "Noto Sans Mono", monospace;
+  --monospace-font-size: 11pt;
+
+  /* Border Radius - Libadwaita Standard */
   --radius-s: 6px;
-  --radius-m: 10px;
-  --radius-l: 14px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+
+  /* Derived Colors for Compatibility */
+  --muted-fg-color: rgba(255, 255, 255, 0.55);
+  --entry-bg-color: var(--card-bg-color);
+  --entry-border-color: var(--border-color);
+  --row-hover-bg-color: rgba(255, 255, 255, 0.06);
+  --row-selected-bg-color: rgba(255, 255, 255, 0.12);
 }
 
 * {
@@ -21,11 +105,13 @@
 }
 
 body {
-  background: var(--cosmic-bg);
-  color: var(--cosmic-text);
-  font-family: 'Cantarell', 'Noto Sans', 'Segoe UI', sans-serif;
-  font-size: 13px;
-  line-height: 1.5;
+  background: var(--window-bg-color);
+  color: var(--window-fg-color);
+  font-family: var(--document-font-family);
+  font-size: 11pt;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {
@@ -48,7 +134,8 @@ button:disabled {
   cursor: default;
 }
 
-input, textarea {
+input,
+textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
@@ -57,20 +144,118 @@ input, textarea {
   background: none;
 }
 
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-s);
+  border: 1px solid transparent;
+  background: var(--card-bg-color);
+  color: var(--view-fg-color);
+  transition: all 150ms ease-out;
+}
+
+.button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.button:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.button.flat {
+  background: transparent;
+  border-color: transparent;
+}
+
+.button.flat:hover:not(:disabled) {
+  background: var(--row-hover-bg-color);
+}
+
+.button.flat:active:not(:disabled) {
+  background: var(--row-selected-bg-color);
+}
+
+.button.suggested {
+  background: var(--accent-bg-color);
+  border-color: transparent;
+  color: var(--accent-fg-color);
+}
+
+.button.suggested:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.button.destructive {
+  background: var(--destructive-bg-color);
+  border: none;
+  color: var(--destructive-fg-color);
+}
+
+.button.destructive:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.button.icon-button {
+  min-width: 32px;
+  padding: 6px;
+}
+
+.link {
+  color: var(--accent-bg-color);
+}
+
+input[type="text"],
+input[type="search"],
+input[type="url"],
+input[type="password"],
+textarea {
+  background: var(--entry-bg-color);
+  border: 1px solid var(--entry-border-color);
+  border-radius: var(--radius-s);
+  padding: 6px 9px;
+  min-height: 32px;
+  font-size: 13px;
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+input[type="text"]:focus,
+input[type="search"]:focus,
+input[type="url"]:focus,
+input[type="password"]:focus,
+textarea:focus {
+  border-color: var(--accent-bg-color);
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent-bg-color);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent-bg-color);
+}
+
+/* Scrollbars - Libadwaita style */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--cosmic-surface);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--cosmic-border);
-  border-radius: 4px;
+  background: var(--shade-color);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--cosmic-muted);
+  background: rgba(255, 255, 255, 0.15);
+  background-clip: padding-box;
 }

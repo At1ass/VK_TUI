@@ -1,9 +1,10 @@
 //! Message types.
 
 use super::AttachmentInfo;
+use serde::{Serialize, Deserialize};
 
 /// Delivery state for messages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeliveryStatus {
     Pending,
     Sent,
@@ -11,7 +12,7 @@ pub enum DeliveryStatus {
 }
 
 /// Preview of a reply message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplyPreview {
     pub from: String,
     pub text: String,
@@ -19,7 +20,7 @@ pub struct ReplyPreview {
 }
 
 /// A forwarded message item (can be nested).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardItem {
     pub from: String,
     pub text: String,
@@ -28,7 +29,7 @@ pub struct ForwardItem {
 }
 
 /// A single message in a conversation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub id: i64,
     pub cmid: Option<i64>,

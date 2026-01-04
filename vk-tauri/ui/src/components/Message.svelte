@@ -78,7 +78,7 @@
       </div>
     {/if}
 
-    <p class="message-text">{message.text}</p>
+    <p class="message-text document">{message.text}</p>
 
     {#if message.attachments && message.attachments.length > 0}
       <div class="attachments">
@@ -104,7 +104,7 @@
 
     {#if message.forwards && message.forwards.length > 0}
       <div class="forwards">
-        <button class="forward-toggle" on:click={() => (forwardsOpen = !forwardsOpen)}>
+        <button class="button flat forward-toggle" on:click={() => (forwardsOpen = !forwardsOpen)}>
           {forwardsOpen ? 'Свернуть пересланные' : `Пересланные сообщения (${message.forwards.length})`}
         </button>
         {#if forwardsOpen}
@@ -136,33 +136,25 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    max-width: 70%;
-    align-self: flex-start;
+    width: 100%;
     cursor: default;
   }
 
-  .message.outgoing {
-    align-self: flex-end;
-  }
-
   .message-bubble {
-    background: var(--cosmic-surface);
-    border: 1px solid var(--cosmic-border);
-    border-radius: var(--radius-l);
-    padding: 0.75rem;
+    background: transparent;
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 6px;
   }
 
   .message.selected .message-bubble {
-    border-color: var(--cosmic-accent);
-    box-shadow: 0 0 0 1px rgba(88, 170, 255, 0.2);
+    background: var(--accent-bg-color-dim);
   }
 
   .message.outgoing .message-bubble {
-    background: #20334f;
-    border-color: #2f466a;
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .message-header {
@@ -175,25 +167,29 @@
   .sender {
     font-weight: 600;
     font-size: 12px;
-    color: var(--cosmic-accent);
+    color: var(--view-fg-color);
+  }
+
+  .message.outgoing .sender {
+    color: var(--accent-bg-color);
   }
 
   .time {
     font-size: 10px;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
   .reply-preview {
     display: flex;
     gap: 0.5rem;
     padding: 0.5rem;
-    background: rgba(53, 132, 228, 0.15);
+    background: var(--accent-bg-color-dim);
     border-radius: var(--radius-s);
   }
 
   .reply-bar {
     width: 3px;
-    background: var(--cosmic-accent);
+    background: var(--accent-bg-color);
     border-radius: 2px;
   }
 
@@ -204,19 +200,22 @@
   .reply-author {
     font-size: 11px;
     font-weight: 600;
-    color: var(--cosmic-accent);
+    color: var(--accent-bg-color);
     margin-bottom: 2px;
   }
 
   .reply-text {
     font-size: 11px;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
-  .message-text {
-    font-size: 14px;
-    line-height: 1.4;
+  /* Document style class for message content - GNOME HIG */
+  .message-text.document {
+    font-family: var(--document-font-family);
+    font-size: var(--document-font-size);
+    line-height: 1.6;
     word-wrap: break-word;
+    color: var(--view-fg-color);
   }
 
   .attachments {
@@ -237,14 +236,15 @@
 
   .attachment-doc {
     padding: 0.5rem;
-    background: var(--cosmic-surface-alt);
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-s);
     font-size: 12px;
   }
 
   .forwards {
     font-size: 11px;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
     font-style: italic;
     display: flex;
     flex-direction: column;
@@ -254,7 +254,7 @@
   .forward-toggle {
     align-self: flex-start;
     font-size: 11px;
-    color: var(--cosmic-accent);
+    color: var(--accent-bg-color);
   }
 
   .forwards-tree {
@@ -268,7 +268,7 @@
     justify-content: flex-end;
     gap: 0.5rem;
     font-size: 10px;
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
 </style>

@@ -13,6 +13,9 @@ path = "src/main.rs"
 # VK API library
 vk-api = { path = "../vk-api" }
 
+# VK Core - shared business logic
+vk-core = { path = "../vk-core" }
+
 # Workspace dependencies
 tokio = { workspace = true }
 serde = { workspace = true }

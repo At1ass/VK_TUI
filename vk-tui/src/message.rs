@@ -6,6 +6,7 @@ use vk_api::User;
 
 /// Messages for the TEA update loop
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 #[allow(clippy::enum_variant_names)]
 pub enum Message {
     /// No operation
@@ -123,6 +124,11 @@ pub enum Message {
     SendFailed(String),
     /// VK API event
     VkEvent(VkEvent),
+    /// Session validation result
+    SessionValidated {
+        valid: bool,
+        error: Option<String>,
+    },
     /// Conversations loaded from API
     ConversationsLoaded {
         chats: Vec<Chat>,

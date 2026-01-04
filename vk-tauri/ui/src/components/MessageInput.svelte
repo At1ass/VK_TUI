@@ -42,7 +42,7 @@
         <span class="reply-author">{replyTo.from_name || getUserName(replyTo.from_id)}</span>
         <span class="reply-text">{truncate(replyTo.text, 40)}</span>
       </div>
-      <button class="btn-cancel" on:click={onCancelReply}>✕</button>
+      <button class="button flat" on:click={onCancelReply}>✕</button>
     </div>
   {/if}
 
@@ -54,7 +54,7 @@
       rows="1"
     ></textarea>
 
-    <button class="btn-send" on:click={handleSubmit} disabled={!text.trim()}>
+    <button class="button suggested" on:click={handleSubmit} disabled={!text.trim()}>
       Отправить
     </button>
   </div>
@@ -62,8 +62,8 @@
 
 <style>
   .message-input-container {
-    border-top: 1px solid var(--cosmic-border);
-    background: var(--cosmic-surface);
+    border-top: 1px solid var(--border-color);
+    background: var(--headerbar-bg-color);
   }
 
   .reply-indicator {
@@ -71,8 +71,13 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.5rem 1rem;
-    background: rgba(53, 132, 228, 0.15);
-    border-bottom: 1px solid var(--cosmic-border);
+    background: var(--accent-bg-color-dim);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .reply-indicator :global(.button) {
+    min-height: 24px;
+    padding: 0.15rem 0.35rem;
   }
 
   .reply-info {
@@ -83,69 +88,41 @@
   }
 
   .reply-label {
-    color: var(--cosmic-muted);
+    color: var(--muted-fg-color);
   }
 
   .reply-author {
     font-weight: 600;
-    color: var(--cosmic-accent);
+    color: var(--accent-bg-color);
   }
 
   .reply-text {
-    color: var(--cosmic-muted);
-  }
-
-  .btn-cancel {
-    padding: 0.25rem 0.5rem;
-    color: var(--cosmic-muted);
-    font-size: 16px;
-  }
-
-  .btn-cancel:hover {
-    color: var(--cosmic-text);
+    color: var(--muted-fg-color);
   }
 
   .input-row {
     display: flex;
-    gap: 0.75rem;
-    padding: 1rem;
+    gap: 0.6rem;
+    padding: 0.5rem 0.75rem;
   }
 
   textarea {
     flex: 1;
-    padding: 0.75rem;
-    background: var(--cosmic-surface-alt);
-    border: 1px solid var(--cosmic-border);
-    border-radius: var(--radius-m);
-    color: var(--cosmic-text);
+    padding: 0.5rem 0.6rem;
+    background: var(--entry-bg-color);
+    border: 1px solid var(--entry-border-color);
+    border-radius: var(--radius-s);
+    color: var(--view-fg-color);
     resize: none;
     min-height: 40px;
     max-height: 120px;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.4;
     transition: border-color 0.2s;
   }
 
   textarea:focus {
-    border-color: var(--cosmic-accent);
-  }
-
-  .btn-send {
-    padding: 0.75rem 1.5rem;
-    background: var(--cosmic-accent);
-    color: #ffffff;
-    border-radius: var(--radius-m);
-    font-weight: 600;
-    transition: all 0.2s;
-  }
-
-  .btn-send:hover:not(:disabled) {
-    background: #2f76cf;
-  }
-
-  .btn-send:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    border-color: var(--accent-bg-color);
   }
 </style>
