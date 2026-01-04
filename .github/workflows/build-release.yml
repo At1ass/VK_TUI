@@ -70,7 +70,9 @@ jobs:
         run: cargo tauri build --bundles appimage,deb
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
-          RUST_LOG: tauri_bundler=debug
+          RUST_LOG: tauri_bundler=trace
+          LINUXDEPLOY_DEBUG: "1"
+          LINUXDEPLOY_LOG_LEVEL: "debug"
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
@@ -195,12 +197,13 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
-            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > vk-messenger.keystore
-            printf "storeFile=../../vk-messenger.keystore\nstorePassword=%s\nkeyPassword=%s\nkeyAlias=%s\n" \
-              "${ANDROID_KEYSTORE_PASSWORD}" \
-              "${ANDROID_KEY_PASSWORD}" \
+            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/vk-messenger.keystore"
+            cd gen/android
+            printf "keyAlias=%s\npassword=%s\nstoreFile=%s\n" \
               "${ANDROID_KEY_ALIAS}" \
-              > gen/android/key.properties
+              "${ANDROID_KEY_PASSWORD:-${ANDROID_KEYSTORE_PASSWORD}}" \
+              "${RUNNER_TEMP}/vk-messenger.keystore" \
+              > keystore.properties
           fi
 
       - name: Build Android APK

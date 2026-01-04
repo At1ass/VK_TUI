@@ -136,12 +136,11 @@ To sign Android builds for distribution:
 keytool -genkey -v -keystore vk-messenger.keystore -alias vk-messenger -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-2. Configure in `vk-tauri/gen/android/key.properties`:
+2. Configure in `vk-tauri/gen/android/keystore.properties`:
 ```properties
-storePassword=YOUR_STORE_PASSWORD
-keyPassword=YOUR_KEY_PASSWORD
 keyAlias=vk-messenger
-storeFile=../../vk-messenger.keystore
+password=YOUR_KEY_PASSWORD
+storeFile=/absolute/path/to/vk-messenger.keystore
 ```
 
 3. Build signed APK:
