@@ -60,6 +60,9 @@ jobs:
             xdg-utils \
             squashfs-tools \
             libfuse2 \
+            rpm \
+            flatpak \
+            flatpak-builder \
             patchelf
 
       - name: Install Tauri CLI
@@ -71,7 +74,7 @@ jobs:
 
       - name: Build Tauri app
         working-directory: vk-tauri
-        run: cargo tauri build --bundles deb,rpm
+        run: cargo tauri build --bundles deb,rpm,flatpak
 
       - name: Upload deb
         uses: actions/upload-artifact@v4
@@ -84,6 +87,12 @@ jobs:
         with:
           name: linux-rpm
           path: target/release/bundle/rpm/*.rpm
+
+      - name: Upload Flatpak
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-flatpak
+          path: target/release/bundle/flatpak/*.flatpak
 
   build-windows:
     name: Build Windows (MSI, NSIS)
@@ -155,6 +164,7 @@ jobs:
           files: |
             linux-deb/*
             linux-rpm/*
+            linux-flatpak/*
             windows-msi/*
             windows-nsis/*
           draft: false

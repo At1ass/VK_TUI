@@ -10,7 +10,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "rpm", "msi", "nsis"],
+    "targets": ["deb", "rpm", "flatpak", "msi", "nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -27,9 +27,6 @@
           "gstreamer1.0-libav"
         ],
         "desktopTemplate": "assets/vk-messenger.desktop"
-      },
-      "appimage": {
-        "bundleMediaFramework": false
       }
     }
   },
