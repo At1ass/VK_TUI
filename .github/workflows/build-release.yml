@@ -47,6 +47,9 @@ jobs:
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
             gstreamer1.0-libav \
+            desktop-file-utils \
+            appstream \
+            xdg-utils \
             libfuse2 \
             patchelf
 
@@ -68,13 +71,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path: vk-tauri/target/release/bundle/appimage/*.AppImage
+          path: target/release/bundle/appimage/*.AppImage
 
       - name: Upload deb
         uses: actions/upload-artifact@v4
         with:
           name: linux-deb
-          path: vk-tauri/target/release/bundle/deb/*.deb
+          path: target/release/bundle/deb/*.deb
 
   build-windows:
     name: Build Windows (MSI, NSIS)
@@ -117,13 +120,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-msi
-          path: vk-tauri/target/release/bundle/msi/*.msi
+          path: target/release/bundle/msi/*.msi
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-nsis
-          path: vk-tauri/target/release/bundle/nsis/*.exe
+          path: target/release/bundle/nsis/*.exe
 
   build-android:
     name: Build Android (APK)
@@ -188,12 +191,11 @@ jobs:
         run: |
           if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
             echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > vk-messenger.keystore
-            cat > gen/android/key.properties <<EOF
-            storeFile=../../vk-messenger.keystore
-            storePassword=${ANDROID_KEYSTORE_PASSWORD}
-            keyPassword=${ANDROID_KEY_PASSWORD}
-            keyAlias=${ANDROID_KEY_ALIAS}
-            EOF
+            printf "storeFile=../../vk-messenger.keystore\nstorePassword=%s\nkeyPassword=%s\nkeyAlias=%s\n" \
+              "${ANDROID_KEYSTORE_PASSWORD}" \
+              "${ANDROID_KEY_PASSWORD}" \
+              "${ANDROID_KEY_ALIAS}" \
+              > gen/android/key.properties
           fi
 
       - name: Build Android APK
