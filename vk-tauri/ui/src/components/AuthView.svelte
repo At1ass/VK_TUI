@@ -20,7 +20,7 @@
       } catch (shellError) {
         console.error('Shell plugin error:', shellError);
         // Fallback: copy URL to clipboard and show message
-        error = `Скопируйте URL: ${url}`;
+        localError = `Скопируйте URL: ${url}`;
       }
     } catch (e) {
       console.error('Failed to open auth URL:', e);
