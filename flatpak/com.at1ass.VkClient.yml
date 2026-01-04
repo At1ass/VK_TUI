@@ -1,0 +1,34 @@
+app-id: com.at1ass.VkClient
+runtime: org.gnome.Platform
+runtime-version: "46"
+sdk: org.gnome.Sdk
+command: vk-tauri
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=x11
+  - --device=dri
+modules:
+  - name: vk-client
+    buildsystem: simple
+    sources:
+      - type: file
+        path: target/release/vk-tauri
+        dest-filename: vk-tauri
+      - type: file
+        path: flatpak/com.at1ass.VkClient.desktop
+      - type: file
+        path: flatpak/com.at1ass.VkClient.metainfo.xml
+      - type: file
+        path: vk-tauri/icons/128x128.png
+        dest-filename: icon-128.png
+      - type: file
+        path: vk-tauri/icons/32x32.png
+        dest-filename: icon-32.png
+    build-commands:
+      - install -Dm755 vk-tauri /app/bin/vk-tauri
+      - install -Dm644 com.at1ass.VkClient.desktop /app/share/applications/com.at1ass.VkClient.desktop
+      - install -Dm644 com.at1ass.VkClient.metainfo.xml /app/share/metainfo/com.at1ass.VkClient.metainfo.xml
+      - install -Dm644 icon-128.png /app/share/icons/hicolor/128x128/apps/com.at1ass.VkClient.png
+      - install -Dm644 icon-32.png /app/share/icons/hicolor/32x32/apps/com.at1ass.VkClient.png

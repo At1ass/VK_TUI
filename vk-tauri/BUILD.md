@@ -2,7 +2,7 @@
 
 ## 📦 Supported Platforms
 
-- ✅ **Linux** (AppImage, .deb, .rpm)
+- ✅ **Linux** (.deb, .rpm, Flatpak)
 - ✅ **Windows** (.msi, .exe NSIS installer)
 - ✅ **Android** (.apk, .aab)
 
@@ -18,7 +18,7 @@
 
 **Linux:**
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf flatpak flatpak-builder
 ```
 
 **Windows:**
@@ -39,23 +39,31 @@ sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchel
 ```bash
 cd vk-tauri
 
-# Build AppImage (recommended - universal format)
-cargo tauri build --bundles appimage
-
 # Build .deb package (Debian/Ubuntu)
 cargo tauri build --bundles deb
 
 # Build .rpm package (Fedora/RHEL)
 cargo tauri build --bundles rpm
 
-# Build all formats
-cargo tauri build
+# Build deb + rpm
+cargo tauri build --bundles deb,rpm
 ```
 
 **Output:**
-- `target/release/bundle/appimage/` - AppImage files
 - `target/release/bundle/deb/` - .deb packages
 - `target/release/bundle/rpm/` - .rpm packages
+
+### Flatpak
+
+```bash
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak-builder --force-clean --install-deps-from=flathub --repo=flatpak/repo flatpak/build flatpak/com.at1ass.VkClient.yml
+mkdir -p target/release/bundle/flatpak
+flatpak build-bundle flatpak/repo target/release/bundle/flatpak/com.at1ass.VkClient.flatpak com.at1ass.VkClient
+```
+
+**Output:**
+- `target/release/bundle/flatpak/com.at1ass.VkClient.flatpak`
 
 ### Windows
 
@@ -116,7 +124,7 @@ git push origin v0.1.0
 ```
 
 This will:
-1. Build Linux AppImage and .deb
+1. Build Linux .deb, .rpm, and Flatpak
 2. Build Windows .msi and .exe
 3. Build Android .apk
 4. Create GitHub Release with all binaries
@@ -188,9 +196,9 @@ Tauri builds can take 5-10 minutes on first run. Subsequent builds will be faste
 ## 📦 Distribution
 
 ### Linux
-- **AppImage**: Works on all distributions, no installation needed
 - **.deb**: For Debian/Ubuntu - `sudo dpkg -i vk-messenger_*.deb`
 - **.rpm**: For Fedora/RHEL - `sudo rpm -i vk-messenger-*.rpm`
+- **Flatpak**: `flatpak install --user vk-client.flatpak`
 
 ### Windows
 - **.msi**: Standard Windows installer
@@ -207,8 +215,7 @@ Tauri builds can take 5-10 minutes on first run. Subsequent builds will be faste
 **Linux users:**
 ```bash
 cd vk-tauri
-cargo tauri build --bundles appimage
-./target/release/bundle/appimage/vk-messenger_*_amd64.AppImage
+cargo tauri build --bundles deb,rpm
 ```
 
 **Windows users:**

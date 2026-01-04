@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.at1ass.VkClient</id>
+  <name>VkClient</name>
+  <summary>Desktop messenger client</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>Desktop messenger client.</p>
+  </description>
+  <launchable type="desktop-id">com.at1ass.VkClient.desktop</launchable>
+  <url type="homepage">https://github.com/at1ass/vk_tui</url>
+</component>

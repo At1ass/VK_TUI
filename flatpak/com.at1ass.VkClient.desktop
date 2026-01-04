@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VkClient
+Comment=Desktop messenger client
+Exec=vk-tauri
+Icon=com.at1ass.VkClient
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+StartupNotify=true

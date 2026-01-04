@@ -74,7 +74,14 @@ jobs:
 
       - name: Build Tauri app
         working-directory: vk-tauri
-        run: cargo tauri build --bundles deb,rpm,flatpak
+        run: cargo tauri build --bundles deb,rpm
+
+      - name: Build Flatpak
+        run: |
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --force-clean --install-deps-from=flathub --repo=flatpak/repo flatpak/build flatpak/com.at1ass.VkClient.yml
+          mkdir -p target/release/bundle/flatpak
+          flatpak build-bundle flatpak/repo target/release/bundle/flatpak/com.at1ass.VkClient.flatpak com.at1ass.VkClient
 
       - name: Upload deb
         uses: actions/upload-artifact@v4
