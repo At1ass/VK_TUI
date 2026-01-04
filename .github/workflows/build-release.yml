@@ -40,8 +40,12 @@ jobs:
             file \
             libssl-dev \
             libgtk-3-dev \
+            libgtk-3-0 \
             libayatana-appindicator3-dev \
             librsvg2-dev \
+            libglib2.0-bin \
+            gdk-pixbuf2.0-bin \
+            shared-mime-info \
             gstreamer1.0-tools \
             gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good \
@@ -50,6 +54,7 @@ jobs:
             desktop-file-utils \
             appstream \
             xdg-utils \
+            squashfs-tools \
             libfuse2 \
             patchelf
 
