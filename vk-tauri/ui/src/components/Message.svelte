@@ -70,7 +70,7 @@
   role="button"
   tabindex="0"
 >
-  <div class="message-bubble">
+  <div class="message-bubble" class:selected={isSelected}>
     <div class="message-header">
       <span class="sender">{message.from_name || getUserName(message.from_id)}</span>
       <span class="time">{formatTime(message.timestamp)}</span>
@@ -161,29 +161,14 @@
   }
 
   .message.selected {
-    background: rgba(53, 132, 228, 0.28);
+    background: rgba(53, 132, 228, 0.22);
+    box-shadow: inset 6px 0 0 rgba(53, 132, 228, 0.95);
+    border-top: 1px solid rgba(53, 132, 228, 0.45);
+    border-bottom: 1px solid rgba(53, 132, 228, 0.45);
   }
 
-  .message.selected .message-bubble {
-    background: transparent;
-    border-left-color: var(--accent-bg-color);
-    box-shadow: none;
-  }
-
-  .message.selected .message-bubble::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-left: 8px solid rgba(53, 132, 228, 0.95);
-    pointer-events: none;
-  }
-
-  .message.selected::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border: 2px solid rgba(53, 132, 228, 0.9);
-    pointer-events: none;
+  .message-bubble.selected {
+    border-left-color: rgba(53, 132, 228, 0.95);
   }
 
   .message.outgoing .message-bubble {
