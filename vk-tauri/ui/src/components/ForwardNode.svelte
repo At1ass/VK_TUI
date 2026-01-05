@@ -34,9 +34,9 @@
     </div>
   {/if}
   {#if !open && item.nested && item.nested.length > 0}
-    <div class="forward-summary">
-      Ещё {item.nested.length} сообщений
-    </div>
+    <button class="button flat forward-summary" on:click={toggle}>
+      Показать ещё {item.nested.length} сообщений
+    </button>
   {/if}
   {#if open && item.nested && item.nested.length > 0}
     <div class="forward-children">
@@ -92,6 +92,8 @@
   .forward-summary {
     font-size: 11px;
     color: var(--muted-fg-color);
+    align-self: flex-start;
+    padding: 0;
   }
 
   .forward-attachments {

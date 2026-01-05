@@ -149,22 +149,22 @@
     flex-direction: column;
     gap: 6px;
     border-left: 4px solid transparent;
+    position: relative;
   }
 
-.message.selected .message-bubble {
-  background: rgba(53, 132, 228, 0.28);
-  border-left-color: var(--accent-bg-color);
-  box-shadow: inset 0 0 0 1px rgba(53, 132, 228, 0.55);
-}
+  .message.selected .message-bubble {
+    background: rgba(53, 132, 228, 0.32);
+    border-left-color: var(--accent-bg-color);
+    box-shadow: inset 0 0 0 1px rgba(53, 132, 228, 0.7);
+  }
 
-.message.selected::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 2px solid rgba(53, 132, 228, 0.85);
-  border-radius: 6px;
-  pointer-events: none;
-}
+  .message.selected .message-bubble::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-left: 6px solid rgba(53, 132, 228, 0.95);
+    pointer-events: none;
+  }
 
   .message.outgoing .message-bubble {
     background: rgba(255, 255, 255, 0.03);
