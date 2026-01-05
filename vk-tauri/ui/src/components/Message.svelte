@@ -161,14 +161,17 @@
   }
 
   .message.selected {
-    background: rgba(53, 132, 228, 0.22);
+    background: rgba(53, 132, 228, 0.18);
     box-shadow: inset 6px 0 0 rgba(53, 132, 228, 0.95);
     border-top: 1px solid rgba(53, 132, 228, 0.45);
     border-bottom: 1px solid rgba(53, 132, 228, 0.45);
   }
 
   .message-bubble.selected {
+    background: rgba(53, 132, 228, 0.35);
     border-left-color: rgba(53, 132, 228, 0.95);
+    outline: 2px solid rgba(53, 132, 228, 0.85);
+    outline-offset: -2px;
   }
 
   .message.outgoing .message-bubble {

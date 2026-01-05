@@ -108,6 +108,7 @@
     color: var(--muted-fg-color);
     align-self: flex-start;
     padding: 0;
+    margin-top: 4px;
   }
 
   .forward-attachments {
