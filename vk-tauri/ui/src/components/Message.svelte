@@ -110,7 +110,7 @@
         {#if forwardsOpen}
           <div class="forwards-tree">
             {#each message.forwards as item}
-              <ForwardNode item={item} level={0} />
+              <ForwardNode item={item} level={0} defaultOpen={false} />
             {/each}
           </div>
         {/if}
@@ -132,13 +132,14 @@
 </div>
 
 <style>
-  .message {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    width: 100%;
-    cursor: default;
-  }
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  cursor: default;
+  position: relative;
+}
 
   .message-bubble {
     background: transparent;
@@ -150,11 +151,20 @@
     border-left: 4px solid transparent;
   }
 
-  .message.selected .message-bubble {
-    background: rgba(53, 132, 228, 0.28);
-    border-left-color: var(--accent-bg-color);
-    box-shadow: inset 0 0 0 1px rgba(53, 132, 228, 0.55);
-  }
+.message.selected .message-bubble {
+  background: rgba(53, 132, 228, 0.28);
+  border-left-color: var(--accent-bg-color);
+  box-shadow: inset 0 0 0 1px rgba(53, 132, 228, 0.55);
+}
+
+.message.selected::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(53, 132, 228, 0.85);
+  border-radius: 6px;
+  pointer-events: none;
+}
 
   .message.outgoing .message-bubble {
     background: rgba(255, 255, 255, 0.03);

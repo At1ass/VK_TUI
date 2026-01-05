@@ -2,7 +2,8 @@
   export let item;
   export let level = 0;
 
-  let open = true;
+  export let defaultOpen = false;
+  let open = defaultOpen;
 
   function toggle() {
     if (item.nested && item.nested.length > 0) {
@@ -40,7 +41,7 @@
   {#if open && item.nested && item.nested.length > 0}
     <div class="forward-children">
       {#each item.nested as child}
-        <svelte:self item={child} level={level + 1} />
+        <svelte:self item={child} level={level + 1} defaultOpen={false} />
       {/each}
     </div>
   {/if}
