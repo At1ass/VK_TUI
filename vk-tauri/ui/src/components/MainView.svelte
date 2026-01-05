@@ -197,19 +197,23 @@
         chats = chats; // Trigger reactivity
       }
 
-      // Add to messages if chat is selected
+      // Add to messages if chat is selected (check for duplicates)
       if (selectedChat && selectedChat.id === peer_id) {
-        messages = [...messages, {
-          id: message_id,
-          from_id,
-          from_name: getUserName(from_id),
-          text,
-          timestamp: timestamp || Math.floor(Date.now() / 1000),
-          is_outgoing: false,
-          is_read: true,
-          is_edited: false,
-          attachments: [],
-        }];
+        const existingIndex = messages.findIndex(m => m.id === message_id);
+        if (existingIndex === -1) {
+          // Only add if not already present
+          messages = [...messages, {
+            id: message_id,
+            from_id,
+            from_name: getUserName(from_id),
+            text,
+            timestamp: timestamp || Math.floor(Date.now() / 1000),
+            is_outgoing: false,
+            is_read: true,
+            is_edited: false,
+            attachments: [],
+          }];
+        }
         invoke('mark_as_read', { peerId: peer_id }).catch(() => {});
       }
     } else if (vkEvent.ConnectionStatus !== undefined) {
