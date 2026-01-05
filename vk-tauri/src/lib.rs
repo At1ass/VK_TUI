@@ -34,6 +34,9 @@ pub fn run() {
             commands::fetch_message_by_id,
             commands::search_messages,
             commands::mark_as_read,
+            commands::send_photo,
+            commands::send_doc,
+            commands::download_attachment,
             commands::logout,
         ])
         .run(tauri::generate_context!())

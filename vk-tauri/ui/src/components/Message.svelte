@@ -1,4 +1,5 @@
 <script>
+  import { invoke } from '@tauri-apps/api/core';
   import ForwardNode from './ForwardNode.svelte';
 
   export let message;
@@ -8,6 +9,28 @@
   export let isSelected = false;
 
   let forwardsOpen = false;
+  let downloadingAttachments = new Set();
+
+  async function downloadAttachment(attachment) {
+    if (!attachment.url) return;
+
+    const id = attachment.url;
+    downloadingAttachments = new Set([...downloadingAttachments, id]);
+
+    try {
+      const filename = attachment.title || `attachment_${Date.now()}`;
+      const savedPath = await invoke('download_attachment', {
+        url: attachment.url,
+        filename
+      });
+      console.log('Downloaded to:', savedPath);
+    } catch (e) {
+      console.error('Failed to download:', e);
+    } finally {
+      downloadingAttachments.delete(id);
+      downloadingAttachments = new Set(downloadingAttachments);
+    }
+  }
 
   function formatTime(timestamp) {
     const date = new Date(timestamp * 1000);
@@ -93,16 +116,80 @@
         {#each message.attachments as attachment}
           <div class="attachment">
             {#if attachment.type === 'photo'}
-              <img src={attachment.url} alt="Attachment" class="attachment-image" />
+              <div class="attachment-wrapper">
+                <img src={attachment.url} alt="Attachment" class="attachment-image" />
+                {#if attachment.url}
+                  <button
+                    class="download-btn"
+                    on:click={(e) => { e.stopPropagation(); downloadAttachment(attachment); }}
+                    disabled={downloadingAttachments.has(attachment.url)}
+                    title="Скачать"
+                  >
+                    {#if downloadingAttachments.has(attachment.url)}
+                      ⏳
+                    {:else}
+                      ⬇
+                    {/if}
+                  </button>
+                {/if}
+              </div>
             {:else if attachment.type === 'video'}
-              <video src={attachment.url} controls class="attachment-video">
-                <track kind="captions" />
-              </video>
+              <div class="attachment-wrapper">
+                <video src={attachment.url} controls class="attachment-video">
+                  <track kind="captions" />
+                </video>
+                {#if attachment.url}
+                  <button
+                    class="download-btn"
+                    on:click={(e) => { e.stopPropagation(); downloadAttachment(attachment); }}
+                    disabled={downloadingAttachments.has(attachment.url)}
+                    title="Скачать"
+                  >
+                    {#if downloadingAttachments.has(attachment.url)}
+                      ⏳
+                    {:else}
+                      ⬇
+                    {/if}
+                  </button>
+                {/if}
+              </div>
             {:else if attachment.type === 'audio'}
-              <audio src={attachment.url} controls class="attachment-audio"></audio>
+              <div class="attachment-wrapper">
+                <audio src={attachment.url} controls class="attachment-audio"></audio>
+                {#if attachment.url}
+                  <button
+                    class="download-btn"
+                    on:click={(e) => { e.stopPropagation(); downloadAttachment(attachment); }}
+                    disabled={downloadingAttachments.has(attachment.url)}
+                    title="Скачать"
+                  >
+                    {#if downloadingAttachments.has(attachment.url)}
+                      ⏳
+                    {:else}
+                      ⬇
+                    {/if}
+                  </button>
+                {/if}
+              </div>
             {:else}
-              <div class="attachment-doc">
-                📎 {attachment.title || 'Файл'}
+              <div class="attachment-doc-wrapper">
+                <div class="attachment-doc">
+                  📎 {attachment.title || 'Файл'}
+                </div>
+                {#if attachment.url}
+                  <button
+                    class="download-btn-inline"
+                    on:click={(e) => { e.stopPropagation(); downloadAttachment(attachment); }}
+                    disabled={downloadingAttachments.has(attachment.url)}
+                    title="Скачать"
+                  >
+                    {#if downloadingAttachments.has(attachment.url)}
+                      Скачивание...
+                    {:else}
+                      ⬇ Скачать
+                    {/if}
+                  </button>
+                {/if}
               </div>
             {/if}
           </div>
@@ -261,6 +348,61 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-s);
     font-size: 12px;
+  }
+
+  .attachment-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+
+  .attachment-wrapper .download-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: none;
+    border-radius: var(--radius-s);
+    padding: 0.4rem 0.6rem;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+    backdrop-filter: blur(4px);
+  }
+
+  .attachment-wrapper .download-btn:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.85);
+  }
+
+  .attachment-wrapper .download-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .attachment-doc-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .attachment-doc-wrapper .download-btn-inline {
+    padding: 0.3rem 0.6rem;
+    background: var(--accent-bg-color);
+    color: white;
+    border: none;
+    border-radius: var(--radius-s);
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .attachment-doc-wrapper .download-btn-inline:hover:not(:disabled) {
+    background: var(--accent-hover-bg-color);
+  }
+
+  .attachment-doc-wrapper .download-btn-inline:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   .forwards {

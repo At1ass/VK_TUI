@@ -33,5 +33,9 @@ anyhow = { workspace = true }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# File downloads
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+directories = "5.0"
+
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }

@@ -52,6 +52,11 @@
     clearSelection();
   }
 
+  // Create reactive selection state for proper visual updates
+  $: selectionState = new Map(
+    messages.map(m => [m.id, selectedIds.has(m.id)])
+  );
+
   async function scrollToBottom() {
     await tick();
     if (messagesContainer) {
@@ -276,10 +281,6 @@
     clearSelection();
   }
 
-  function isMessageSelected(messageId) {
-    return selectedIds.has(messageId);
-  }
-
   onMount(() => {
     const closeOnClick = () => {
       if (contextMenu) {
@@ -317,7 +318,7 @@
         <Message
           {message}
           {users}
-          isSelected={isMessageSelected(message.id)}
+          isSelected={selectionState.get(message.id) ?? false}
           onSelect={selectMessage}
           onContextMenu={openContextMenu}
         />
@@ -335,6 +336,7 @@
   <MessageInput
     {replyTo}
     {users}
+    peerId={chat?.id}
     onSend={handleSend}
     onCancelReply={handleCancelReply}
   />

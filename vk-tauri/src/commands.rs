@@ -275,6 +275,78 @@ pub async fn mark_as_read(
     Ok(())
 }
 
+/// Send a photo attachment.
+#[tauri::command]
+pub async fn send_photo(
+    state: State<'_, AppState>,
+    peer_id: i64,
+    path: String,
+) -> Result<(), String> {
+    let tx = state.command_tx.lock().await;
+    if let Some(tx) = tx.as_ref() {
+        tx.send(AsyncCommand::SendPhoto {
+            peer_id,
+            path: std::path::PathBuf::from(path),
+        })
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Send a document attachment.
+#[tauri::command]
+pub async fn send_doc(
+    state: State<'_, AppState>,
+    peer_id: i64,
+    path: String,
+) -> Result<(), String> {
+    let tx = state.command_tx.lock().await;
+    if let Some(tx) = tx.as_ref() {
+        tx.send(AsyncCommand::SendDoc {
+            peer_id,
+            path: std::path::PathBuf::from(path),
+        })
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Download an attachment to the Downloads folder.
+#[tauri::command]
+pub async fn download_attachment(
+    url: String,
+    filename: String,
+) -> Result<String, String> {
+    use std::path::PathBuf;
+
+    // Get Downloads directory
+    let download_dir = directories::UserDirs::new()
+        .and_then(|dirs| dirs.download_dir().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    // Create full path
+    let file_path = download_dir.join(&filename);
+
+    // Download file
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Download failed: {}", e))?;
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    // Save to file
+    std::fs::write(&file_path, &bytes)
+        .map_err(|e| format!("Failed to save file: {}", e))?;
+
+    Ok(file_path.display().to_string())
+}
+
 /// Logout.
 #[tauri::command]
 pub async fn logout(state: State<'_, AppState>) -> Result<(), String> {
