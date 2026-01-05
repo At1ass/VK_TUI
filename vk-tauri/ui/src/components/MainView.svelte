@@ -42,6 +42,34 @@
       unlistenCore = await listen('core:event', (event) => {
         handleEvent(event.payload);
       });
+
+      // Global keyboard shortcuts
+      const handleKeyDown = (e) => {
+        // Ctrl+F - open search
+        if (e.ctrlKey && e.key === 'f') {
+          e.preventDefault();
+          if (!searchBarVisible) {
+            toggleSearchBar();
+          }
+        }
+        // Escape - close modals and search bar
+        else if (e.key === 'Escape') {
+          if (searchOpen) {
+            searchOpen = false;
+          } else if (searchBarVisible) {
+            toggleSearchBar();
+          } else if (sidebarRevealed) {
+            closeSidebar();
+          }
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+
+      // Store cleanup function
+      unlistenCore.cleanup = () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
     } catch (e) {
       console.error('Failed to load conversations:', e);
       status = `Ошибка: ${e}`;
@@ -50,6 +78,9 @@
 
   onDestroy(() => {
     if (unlistenCore) {
+      if (unlistenCore.cleanup) {
+        unlistenCore.cleanup();
+      }
       unlistenCore();
     }
   });

@@ -1,12 +1,64 @@
 <script>
+  import { onMount, onDestroy } from 'svelte';
+
   export let chats = [];
   export let loading = false;
   export let selectedChatId = null;
   export let onSelectChat;
 
+  let focusedIndex = -1;
+
+  onMount(() => {
+    const handleKeyDown = (e) => {
+      if (chats.length === 0) return;
+
+      // Arrow Down - move focus down
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusedIndex = Math.min(focusedIndex + 1, chats.length - 1);
+        // If we were at -1, start from selected or 0
+        if (focusedIndex === -1) {
+          const selectedIndex = chats.findIndex(c => c.id === selectedChatId);
+          focusedIndex = selectedIndex >= 0 ? selectedIndex : 0;
+        }
+      }
+      // Arrow Up - move focus up
+      else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (focusedIndex <= 0) {
+          focusedIndex = 0;
+        } else {
+          focusedIndex = Math.max(0, focusedIndex - 1);
+        }
+      }
+      // Enter - select focused chat
+      else if (e.key === 'Enter' && focusedIndex >= 0 && focusedIndex < chats.length) {
+        e.preventDefault();
+        onSelectChat(chats[focusedIndex]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  });
+
+  onDestroy(() => {
+    // Cleanup is handled by onMount return
+  });
+
   function truncate(text, maxLen = 30) {
     if (text.length <= maxLen) return text;
     return text.substring(0, maxLen) + '...';
+  }
+
+  $: if (selectedChatId) {
+    const selectedIndex = chats.findIndex(c => c.id === selectedChatId);
+    if (selectedIndex >= 0) {
+      focusedIndex = selectedIndex;
+    }
   }
 </script>
 
@@ -21,10 +73,11 @@
       <p>Нет чатов</p>
     </div>
   {:else}
-    {#each chats as chat (chat.id)}
+    {#each chats as chat, i (chat.id)}
       <button
         class="chat-item"
         class:selected={chat.id === selectedChatId}
+        class:focused={i === focusedIndex}
         on:click={() => onSelectChat(chat)}
       >
         <div class="chat-header">
@@ -137,6 +190,12 @@
 
   .chat-item.selected .chat-preview {
     color: rgba(255, 255, 255, 0.7);
+  }
+
+  .chat-item.focused:not(.selected) {
+    background: var(--row-hover-bg-color);
+    outline: 2px solid var(--accent-bg-color);
+    outline-offset: -2px;
   }
 
   .chat-header {
