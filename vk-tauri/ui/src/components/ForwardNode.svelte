@@ -44,6 +44,9 @@
         <svelte:self item={child} level={level + 1} defaultOpen={false} />
       {/each}
     </div>
+    <button class="button flat forward-summary" on:click={toggle}>
+      Свернуть
+    </button>
   {/if}
 </div>
 
