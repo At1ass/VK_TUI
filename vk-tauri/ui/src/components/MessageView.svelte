@@ -6,6 +6,7 @@
   export let chat = null;
   export let messages = [];
   export let users = {};
+  export let chats = [];
   export let onSendMessage;
   export let onSendReply;
   export let onForward;
@@ -28,10 +29,12 @@
   let selectedIds = new Set();
   let lastSelectedId = null;
   let contextMenu = null;
+  let contextMenuEl = null;
   let forwardModalOpen = false;
   let forwardMessageIds = [];
   let forwardComment = '';
   let forwardError = '';
+  let forwardTargetId = null;
   let editModalOpen = false;
   let editTarget = null;
   let editText = '';
@@ -76,6 +79,9 @@
 
   function handleScroll() {
     if (!messagesContainer) return;
+    if (contextMenu) {
+      closeContextMenu();
+    }
     if (isPrepending || pendingPrepend) return;
     const top = messagesContainer.scrollTop;
     const height = messagesContainer.scrollHeight;
@@ -123,6 +129,9 @@
   }
 
   function selectMessage(message, event) {
+    if (contextMenu) {
+      closeContextMenu();
+    }
     const multi = event.ctrlKey || event.metaKey || event.shiftKey;
     if (multi) {
       if (selectedIds.has(message.id)) {
@@ -137,7 +146,7 @@
     selectedIds = new Set(selectedIds);
   }
 
-  function openContextMenu(message, event) {
+  async function openContextMenu(message, event) {
     if (!selectedIds.has(message.id)) {
       selectedIds = new Set([message.id]);
       lastSelectedId = message.id;
@@ -147,6 +156,22 @@
       y: event.clientY,
       message,
     };
+    await tick();
+    if (contextMenuEl) {
+      const rect = contextMenuEl.getBoundingClientRect();
+      const padding = 8;
+      let x = event.clientX;
+      let y = event.clientY;
+      if (x + rect.width > window.innerWidth - padding) {
+        x = window.innerWidth - rect.width - padding;
+      }
+      if (y + rect.height > window.innerHeight - padding) {
+        y = window.innerHeight - rect.height - padding;
+      }
+      if (x < padding) x = padding;
+      if (y < padding) y = padding;
+      contextMenu = { ...contextMenu, x, y };
+    }
   }
 
   function clearSelection() {
@@ -176,6 +201,7 @@
     forwardMessageIds = ids;
     forwardComment = '';
     forwardError = '';
+    forwardTargetId = chat?.id ?? null;
     forwardModalOpen = true;
     closeContextMenu();
   }
@@ -208,10 +234,16 @@
       forwardError = 'Комментарий обязателен';
       return;
     }
-    await onForward(forwardMessageIds, forwardComment.trim());
+    const targetId = Number(forwardTargetId);
+    if (!Number.isFinite(targetId)) {
+      forwardError = 'Выберите диалог';
+      return;
+    }
+    await onForward(forwardMessageIds, forwardComment.trim(), targetId);
     forwardModalOpen = false;
     forwardMessageIds = [];
     forwardComment = '';
+    forwardTargetId = null;
     clearSelection();
   }
 
@@ -274,8 +306,8 @@
   });
 </script>
 
-<div class="message-view">
-  <div class="messages-container" bind:this={messagesContainer} on:scroll={handleScroll}>
+  <div class="message-view">
+    <div class="messages-container" bind:this={messagesContainer} on:scroll={handleScroll}>
     {#if messages.length === 0}
       <div class="empty">
         <p>Нет сообщений</p>
@@ -308,9 +340,12 @@
   />
 
   {#if contextMenu}
+    <div class="overlay" on:click={closeContextMenu}></div>
     <div
       class="context-menu"
+      bind:this={contextMenuEl}
       style={`top: ${contextMenu.y}px; left: ${contextMenu.x}px;`}
+      on:click|stopPropagation
     >
       <button on:click={handleMenuReply}>Ответить</button>
       <button on:click={handleMenuForward}>Переслать</button>
@@ -326,6 +361,19 @@
         {#if forwardError}
           <div class="error">{forwardError}</div>
         {/if}
+        <label class="field">
+          <span>Куда переслать</span>
+          <select bind:value={forwardTargetId}>
+            {#if chat}
+              <option value={chat.id}>Текущий чат</option>
+            {/if}
+            {#each chats as item (item.id)}
+              {#if !chat || item.id !== chat.id}
+                <option value={item.id}>{item.title}</option>
+              {/if}
+            {/each}
+          </select>
+        </label>
         <textarea
           placeholder="Комментарий обязателен"
           bind:value={forwardComment}
@@ -422,6 +470,13 @@
     background: var(--row-hover-bg-color);
   }
 
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    background: transparent;
+  }
+
   /* Dialog/Modal - GNOME HIG compliant */
   .modal-overlay {
     position: fixed;
@@ -471,6 +526,23 @@
     justify-content: flex-end;
     gap: 12px;
     margin-top: 6px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted-fg-color);
+  }
+
+  .field select {
+    background: var(--entry-bg-color);
+    border: 1px solid var(--entry-border-color);
+    border-radius: var(--radius-s);
+    color: var(--view-fg-color);
+    padding: 6px 10px;
+    font-size: 13px;
   }
 
   .error {

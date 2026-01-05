@@ -416,12 +416,12 @@
     }
   }
 
-  async function handleForward(messageIds, comment) {
-    if (!selectedChat || !comment.trim() || messageIds.length === 0) return;
+  async function handleForward(messageIds, comment, targetPeerId) {
+    if (!comment.trim() || messageIds.length === 0 || !targetPeerId) return;
 
     try {
       await invoke('send_forward', {
-        peerId: selectedChat.id,
+        peerId: targetPeerId,
         messageIds,
         comment,
       });
@@ -552,6 +552,7 @@
         chat={selectedChat}
         {messages}
         {users}
+        {chats}
         onSendMessage={handleSendMessage}
         onSendReply={handleSendReply}
         onForward={handleForward}
@@ -570,7 +571,8 @@
   </div>
 
   {#if searchOpen}
-    <div class="search-panel">
+    <div class="overlay" on:click={() => (searchOpen = false)}></div>
+    <div class="search-panel" on:click|stopPropagation>
       <div class="search-panel-header">
         <span>Результаты поиска ({searchTotal})</span>
         <button class="button flat" on:click={() => (searchOpen = false)}>Закрыть</button>
@@ -757,6 +759,13 @@
     align-items: center;
     justify-content: center;
     color: var(--muted-fg-color);
+  }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    background: transparent;
   }
 
   .search-panel {

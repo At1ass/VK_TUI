@@ -147,10 +147,13 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    border-left: 3px solid transparent;
   }
 
   .message.selected .message-bubble {
-    background: var(--accent-bg-color-dim);
+    background: var(--accent-bg-color-strong);
+    border-left-color: var(--accent-bg-color);
+    box-shadow: inset 0 0 0 1px rgba(53, 132, 228, 0.35);
   }
 
   .message.outgoing .message-bubble {
