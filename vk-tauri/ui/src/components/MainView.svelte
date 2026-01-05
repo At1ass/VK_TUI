@@ -13,6 +13,7 @@
   let selectedChat = null;
   let loading = false;
   let status = 'Подключение...';
+  let typingTimeoutId = null;
   let unlistenCore = null;
   let searchQuery = '';
   let searchResults = [];
@@ -156,7 +157,11 @@
       // Update unread counter for chat
       const chat = chats.find(c => c.id === peer_id);
       if (chat) {
-        chat.unread_count = (chat.unread_count || 0) + 1;
+        if (!selectedChat || selectedChat.id !== peer_id) {
+          chat.unread_count = (chat.unread_count || 0) + 1;
+        } else {
+          chat.unread_count = 0;
+        }
         chat.last_message = text;
         chats = chats; // Trigger reactivity
       }
@@ -179,12 +184,17 @@
     } else if (vkEvent.ConnectionStatus !== undefined) {
       status = vkEvent.ConnectionStatus ? 'Подключено' : 'Отключено';
     } else if (vkEvent.UserTyping) {
-      const { user_id } = vkEvent.UserTyping;
-      status = `${getUserName(user_id)} печатает...`;
-
-      setTimeout(() => {
-        status = 'Готово';
-      }, 3000);
+      const { peer_id, user_id } = vkEvent.UserTyping;
+      if (selectedChat && selectedChat.id === peer_id) {
+        status = `${getUserName(user_id)} печатает...`;
+        if (typingTimeoutId) {
+          clearTimeout(typingTimeoutId);
+        }
+        typingTimeoutId = setTimeout(() => {
+          status = 'Готово';
+          typingTimeoutId = null;
+        }, 3000);
+      }
     } else if (vkEvent.MessageEditedFromLongPoll) {
       const { peer_id, message_id } = vkEvent.MessageEditedFromLongPoll;
       if (selectedChat && selectedChat.id === peer_id) {
@@ -230,10 +240,20 @@
     pendingLoadDirection = 'replace';
     paginationAnchorId = null;
     paginationOffset = 0;
+    if (typingTimeoutId) {
+      clearTimeout(typingTimeoutId);
+      typingTimeoutId = null;
+    }
+    status = 'Готово';
 
     try {
       await invoke('load_messages', { peerId: chat.id, offset: 0 });
       await invoke('mark_as_read', { peerId: chat.id });
+      const target = chats.find(c => c.id === chat.id);
+      if (target) {
+        target.unread_count = 0;
+        chats = chats;
+      }
     } catch (e) {
       console.error('Failed to load messages:', e);
     }
