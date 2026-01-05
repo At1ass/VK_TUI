@@ -2,7 +2,7 @@
   export let item;
   export let level = 0;
 
-  let open = false;
+  let open = true;
 
   function toggle() {
     if (item.nested && item.nested.length > 0) {
@@ -30,6 +30,11 @@
       {#each item.attachments as attachment}
         <span class="attachment-pill">{attachment.type}</span>
       {/each}
+    </div>
+  {/if}
+  {#if !open && item.nested && item.nested.length > 0}
+    <div class="forward-summary">
+      Ещё {item.nested.length} сообщений
     </div>
   {/if}
   {#if open && item.nested && item.nested.length > 0}
@@ -81,6 +86,11 @@
   .forward-text {
     font-size: 12px;
     color: var(--view-fg-color);
+  }
+
+  .forward-summary {
+    font-size: 11px;
+    color: var(--muted-fg-color);
   }
 
   .forward-attachments {
