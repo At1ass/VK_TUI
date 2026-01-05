@@ -571,7 +571,12 @@
   </div>
 
   {#if searchOpen}
-    <div class="overlay" on:click={() => (searchOpen = false)}></div>
+    <button
+      class="overlay"
+      type="button"
+      aria-label="Закрыть поиск"
+      on:click={() => (searchOpen = false)}
+    ></button>
     <div class="search-panel" on:click|stopPropagation>
       <div class="search-panel-header">
         <span>Результаты поиска ({searchTotal})</span>
@@ -766,6 +771,8 @@
     inset: 0;
     z-index: 1100;
     background: transparent;
+    border: none;
+    padding: 0;
   }
 
   .search-panel {

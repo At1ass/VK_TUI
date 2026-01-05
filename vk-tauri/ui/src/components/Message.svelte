@@ -57,10 +57,18 @@
   class:selected={isSelected}
   data-message-id={message.id}
   on:click={(event) => onSelect?.(message, event)}
+  on:keydown={(event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onSelect?.(message, event);
+    }
+  }}
   on:contextmenu={(event) => {
     event.preventDefault();
     onContextMenu?.(message, event);
   }}
+  role="button"
+  tabindex="0"
 >
   <div class="message-bubble">
     <div class="message-header">
@@ -152,10 +160,14 @@
     position: relative;
   }
 
+  .message.selected {
+    background: rgba(53, 132, 228, 0.28);
+  }
+
   .message.selected .message-bubble {
-    background: rgba(53, 132, 228, 0.45);
+    background: transparent;
     border-left-color: var(--accent-bg-color);
-    box-shadow: inset 0 0 0 1px rgba(53, 132, 228, 0.9);
+    box-shadow: none;
   }
 
   .message.selected .message-bubble::before {
@@ -163,6 +175,14 @@
     position: absolute;
     inset: 0;
     border-left: 8px solid rgba(53, 132, 228, 0.95);
+    pointer-events: none;
+  }
+
+  .message.selected::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(53, 132, 228, 0.9);
     pointer-events: none;
   }
 

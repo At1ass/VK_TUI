@@ -340,7 +340,12 @@
   />
 
   {#if contextMenu}
-    <div class="overlay" on:click={closeContextMenu}></div>
+    <button
+      class="overlay"
+      type="button"
+      aria-label="Закрыть меню"
+      on:click={closeContextMenu}
+    ></button>
     <div
       class="context-menu"
       bind:this={contextMenuEl}
@@ -475,6 +480,8 @@
     inset: 0;
     z-index: 900;
     background: transparent;
+    border: none;
+    padding: 0;
   }
 
   /* Dialog/Modal - GNOME HIG compliant */

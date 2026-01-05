@@ -22,6 +22,11 @@
       {/if}
     </button>
     <span class="author">{item.from}</span>
+    {#if item.nested && item.nested.length > 0}
+      <button class="button flat toggle-label" on:click={toggle}>
+        {open ? 'Свернуть' : 'Развернуть'}
+      </button>
+    {/if}
   </div>
   {#if item.text}
     <div class="forward-text">{item.text}</div>
@@ -76,6 +81,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 0;
+  }
+
+  .toggle-label {
+    font-size: 11px;
+    color: var(--accent-bg-color);
     padding: 0;
   }
 
