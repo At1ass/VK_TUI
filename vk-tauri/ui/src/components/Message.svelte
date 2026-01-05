@@ -18,7 +18,19 @@
     downloadingAttachments = new Set([...downloadingAttachments, id]);
 
     try {
-      const filename = attachment.title || `attachment_${Date.now()}`;
+      // Extract extension from URL
+      const urlParts = attachment.url.split('?')[0].split('.');
+      const ext = urlParts.length > 1 ? urlParts[urlParts.length - 1] : 'bin';
+
+      // Generate unique filename with timestamp and type
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const type = attachment.type || 'file';
+      const baseFilename = attachment.title || `${type}_${timestamp}`;
+
+      // Remove extension from title if present, then add correct one
+      const filenameWithoutExt = baseFilename.replace(/\.[^.]+$/, '');
+      const filename = `${filenameWithoutExt}.${ext}`;
+
       const savedPath = await invoke('download_attachment', {
         url: attachment.url,
         filename

@@ -9,6 +9,8 @@
     "core:window:allow-close",
     "core:webview:allow-internal-toggle-devtools",
     "shell:allow-open",
-    "shell:default"
+    "shell:default",
+    "dialog:default",
+    "dialog:allow-open"
   ]
 }
