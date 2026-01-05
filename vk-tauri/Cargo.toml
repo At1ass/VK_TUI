@@ -19,7 +19,7 @@ vk-api = { path = "../vk-api" }
 vk-core = { path = "../vk-core" }
 
 # Tauri
-tauri = { version = "2.1", features = ["devtools"] }
+tauri = { version = "2.1", features = ["devtools", "tray-icon"] }
 tauri-plugin-shell = "2.0"
 tauri-plugin-dialog = "2.0"
 tauri-plugin-notification = "2.0"

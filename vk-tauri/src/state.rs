@@ -1,7 +1,7 @@
 //! Application state management.
 
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, tray::TrayIcon};
 use tokio::sync::{mpsc, Mutex};
 use vk_api::{VkClient, auth::AuthManager};
 use vk_core::{AsyncCommand, CommandExecutor, CoreEvent};
@@ -11,6 +11,8 @@ pub struct AppState {
     pub auth: Arc<Mutex<AuthManager>>,
     pub vk_client: Arc<Mutex<Option<Arc<VkClient>>>>,
     pub command_tx: Arc<Mutex<Option<mpsc::UnboundedSender<AsyncCommand>>>>,
+    pub tray_icon: Arc<Mutex<Option<TrayIcon<tauri::Wry>>>>,
+    pub unread_count: Arc<Mutex<u32>>,
 }
 
 impl AppState {
@@ -19,6 +21,8 @@ impl AppState {
             auth: Arc::new(Mutex::new(AuthManager::default())),
             vk_client: Arc::new(Mutex::new(None)),
             command_tx: Arc::new(Mutex::new(None)),
+            tray_icon: Arc::new(Mutex::new(None)),
+            unread_count: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -46,6 +50,8 @@ impl AppState {
         *self.command_tx.lock().await = Some(cmd_tx);
         let emit_handle = app_handle.clone();
         let notification_handle = app_handle.clone();
+        let tray_icon = self.tray_icon.clone();
+        let unread_count = self.unread_count.clone();
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
                 // Send notification for new incoming messages
@@ -78,6 +84,20 @@ impl AppState {
                             .body(&body)
                             .show();
                     }
+                }
+
+                // Update tray tooltip when conversations are loaded
+                if let CoreEvent::ConversationsLoaded { chats, .. } = &event {
+                    let total_unread: u32 = chats.iter().map(|c| c.unread_count).sum();
+                    if let Some(tray) = tray_icon.lock().await.as_ref() {
+                        let tooltip = if total_unread > 0 {
+                            format!("VK Messenger ({} непрочитанных)", total_unread)
+                        } else {
+                            "VK Messenger".to_string()
+                        };
+                        let _ = tray.set_tooltip(Some(tooltip));
+                    }
+                    *unread_count.lock().await = total_unread;
                 }
 
                 let _ = emit_handle.emit("core:event", event);
@@ -189,6 +209,19 @@ impl AppState {
                 }
             }
         }
+    }
+
+    /// Update tray icon tooltip with unread count
+    pub async fn update_tray_tooltip(&self, unread: u32) {
+        if let Some(tray) = self.tray_icon.lock().await.as_ref() {
+            let tooltip = if unread > 0 {
+                format!("VK Messenger ({} непрочитанных)", unread)
+            } else {
+                "VK Messenger".to_string()
+            };
+            let _ = tray.set_tooltip(Some(tooltip));
+        }
+        *self.unread_count.lock().await = unread;
     }
 }
 
