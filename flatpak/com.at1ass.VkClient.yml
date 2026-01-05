@@ -1,6 +1,6 @@
 app-id: com.at1ass.VkClient
 runtime: org.gnome.Platform
-runtime-version: "46"
+runtime-version: "47"
 sdk: org.gnome.Sdk
 command: vk-tauri
 finish-args:
@@ -14,17 +14,17 @@ modules:
     buildsystem: simple
     sources:
       - type: file
-        path: target/release/vk-tauri
+        path: ../target/release/vk-tauri
         dest-filename: vk-tauri
       - type: file
-        path: flatpak/com.at1ass.VkClient.desktop
+        path: com.at1ass.VkClient.desktop
       - type: file
-        path: flatpak/com.at1ass.VkClient.metainfo.xml
+        path: com.at1ass.VkClient.metainfo.xml
       - type: file
-        path: vk-tauri/icons/128x128.png
+        path: ../vk-tauri/icons/128x128.png
         dest-filename: icon-128.png
       - type: file
-        path: vk-tauri/icons/32x32.png
+        path: ../vk-tauri/icons/32x32.png
         dest-filename: icon-32.png
     build-commands:
       - install -Dm755 vk-tauri /app/bin/vk-tauri
