@@ -15,6 +15,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(state::AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_auth_url,

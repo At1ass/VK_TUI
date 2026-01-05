@@ -45,8 +45,41 @@ impl AppState {
         *self.vk_client.lock().await = Some(client.clone());
         *self.command_tx.lock().await = Some(cmd_tx);
         let emit_handle = app_handle.clone();
+        let notification_handle = app_handle.clone();
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
+                // Send notification for new incoming messages
+                if let CoreEvent::VkEvent(vk_core::VkEvent::NewMessage {
+                    text,
+                    from_id,
+                    is_outgoing,
+                    ..
+                }) = &event
+                {
+                    use tauri_plugin_notification::NotificationExt;
+
+                    // Only notify for incoming messages
+                    if !is_outgoing {
+                        let title = if *from_id > 0 {
+                            format!("Новое сообщение от пользователя {}", from_id)
+                        } else {
+                            format!("Новое сообщение в беседе")
+                        };
+                        let body = if text.len() > 100 {
+                            format!("{}...", &text[..100])
+                        } else {
+                            text.clone()
+                        };
+
+                        let _ = notification_handle
+                            .notification()
+                            .builder()
+                            .title(&title)
+                            .body(&body)
+                            .show();
+                    }
+                }
+
                 let _ = emit_handle.emit("core:event", event);
             }
         });

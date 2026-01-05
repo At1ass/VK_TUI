@@ -1404,6 +1404,7 @@ fn handle_vk_event(app: &mut App, event: VkEvent) -> Option<Message> {
             timestamp,
             text,
             from_id,
+            is_outgoing,
         } => {
             if app.current_peer_id == Some(peer_id) {
                 app.messages.push(ChatMessage {
@@ -1413,7 +1414,7 @@ fn handle_vk_event(app: &mut App, event: VkEvent) -> Option<Message> {
                     from_name: app.get_user_name(from_id),
                     text,
                     timestamp,
-                    is_outgoing: from_id == app.auth.user_id().unwrap_or(0),
+                    is_outgoing,
                     is_read: true,
                     is_edited: false,
                     is_pinned: false,

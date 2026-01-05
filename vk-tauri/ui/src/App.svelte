@@ -1,6 +1,10 @@
 <script>
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import {
+    isPermissionGranted,
+    requestPermission,
+  } from '@tauri-apps/plugin-notification';
   import AuthView from './components/AuthView.svelte';
   import MainView from './components/MainView.svelte';
 
@@ -16,6 +20,13 @@
       if (authenticated) {
         // Validate session
         await invoke('validate_session');
+      }
+
+      // Request notification permissions
+      let permissionGranted = await isPermissionGranted();
+      if (!permissionGranted) {
+        const permission = await requestPermission();
+        permissionGranted = permission === 'granted';
       }
     } catch (e) {
       console.error('Session validation failed:', e);

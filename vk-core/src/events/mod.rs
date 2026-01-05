@@ -17,6 +17,7 @@ pub enum VkEvent {
         timestamp: i64,
         text: String,
         from_id: i64,
+        is_outgoing: bool,
     },
     /// Message read.
     MessageRead { peer_id: i64, message_id: i64 },

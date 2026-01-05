@@ -21,6 +21,7 @@ pub fn handle_update(update: &Value) -> Option<VkEvent> {
         4 => {
             // New message: [4, message_id, flags, peer_id, timestamp, text, extra, attachments]
             let message_id = arr.get(1).and_then(|v| v.as_i64())?;
+            let flags = arr.get(2).and_then(|v| v.as_i64()).unwrap_or(0);
             let peer_id = arr.get(3).and_then(|v| v.as_i64())?;
             let timestamp = arr.get(4).and_then(|v| v.as_i64()).unwrap_or(0);
             let text = arr
@@ -35,12 +36,15 @@ pub fn handle_update(update: &Value) -> Option<VkEvent> {
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse::<i64>().ok())
                 .or(Some(peer_id))?;
+            // Bit 1 (value 2) in flags means OUTBOX (message is outgoing)
+            let is_outgoing = (flags & 2) != 0;
             Some(VkEvent::NewMessage {
                 message_id,
                 peer_id,
                 timestamp,
                 text,
                 from_id,
+                is_outgoing,
             })
         }
         5 => {
