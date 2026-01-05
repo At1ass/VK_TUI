@@ -21,18 +21,23 @@
         // Validate session
         await invoke('validate_session');
       }
+    } catch (e) {
+      console.error('Session validation failed:', e);
+      authenticated = false;
+    } finally {
+      loading = false;
+    }
 
-      // Request notification permissions
+    // Request notification permissions (separately, so it doesn't break auth)
+    try {
       let permissionGranted = await isPermissionGranted();
       if (!permissionGranted) {
         const permission = await requestPermission();
         permissionGranted = permission === 'granted';
       }
     } catch (e) {
-      console.error('Session validation failed:', e);
-      authenticated = false;
-    } finally {
-      loading = false;
+      console.warn('Notification permissions request failed:', e);
+      // Non-critical, continue without notifications
     }
   });
 
