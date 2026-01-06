@@ -34,8 +34,8 @@
   {#if item.attachments && item.attachments.length > 0}
     <div class="forward-attachments">
       {#each item.attachments as attachment}
-        {#if (attachment.type === 'photo' || attachment.kind === 'Photo') && attachment.url}
-          <img src={attachment.url} alt="Фото" class="forward-image" loading="lazy" decoding="async" />
+        {#if (attachment.type === 'photo' || attachment.kind === 'Photo') && (attachment.thumbnail_url || attachment.url)}
+          <img src={attachment.thumbnail_url || attachment.url} alt="Фото" class="forward-image" loading="lazy" decoding="async" />
         {:else if (attachment.type === 'sticker' || attachment.kind === 'Sticker') && attachment.url}
           <img src={attachment.url} alt="Стикер" class="forward-sticker" loading="lazy" decoding="async" />
         {:else}

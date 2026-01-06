@@ -8,6 +8,8 @@ pub struct AttachmentInfo {
     pub kind: AttachmentKind,
     pub title: String,
     pub url: Option<String>,
+    /// Thumbnail/preview URL for images (smaller resolution)
+    pub thumbnail_url: Option<String>,
     pub size: Option<u64>,
     pub subtitle: Option<String>,
 }

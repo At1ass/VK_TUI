@@ -10,9 +10,10 @@ use vk_api::User;
 pub fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
     match att.attachment_type.as_str() {
         "photo" => {
-            let best = att
-                .photo
-                .as_ref()
+            let photo = att.photo.as_ref();
+
+            // Get highest quality for full size
+            let best = photo
                 .and_then(|p| {
                     p.sizes
                         .iter()
@@ -26,10 +27,34 @@ pub fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
                 })
                 .map(|(url, _)| url);
 
+            // Get medium quality for thumbnail (around 400-600px width)
+            let thumbnail = photo
+                .and_then(|p| {
+                    p.sizes
+                        .iter()
+                        .filter_map(|s| {
+                            s.url.as_ref().map(|url| {
+                                let width = s.width.unwrap_or(0);
+                                // Prefer images around 400-600px for thumbnail
+                                let score_diff = if width >= 400 && width <= 600 {
+                                    0 // Perfect match
+                                } else if width < 400 {
+                                    400 - width // Smaller is worse
+                                } else {
+                                    width - 600 // Larger is worse
+                                };
+                                (url.clone(), score_diff)
+                            })
+                        })
+                        .min_by_key(|(_, score)| *score)
+                        .map(|(url, _)| url)
+                });
+
             AttachmentInfo {
                 kind: AttachmentKind::Photo,
                 title: "Photo".into(),
                 url: best,
+                thumbnail_url: thumbnail,
                 size: None,
                 subtitle: None,
             }
@@ -40,6 +65,7 @@ pub fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
                 kind: AttachmentKind::Doc,
                 title: doc.title.unwrap_or_else(|| "Document".to_string()),
                 url: doc.url,
+                thumbnail_url: None,
                 size: doc.size,
                 subtitle: doc.extension,
             }
@@ -59,6 +85,7 @@ pub fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
                 kind: AttachmentKind::Link,
                 title,
                 url,
+                thumbnail_url: None,
                 size: None,
                 subtitle: None,
             }
@@ -82,6 +109,7 @@ pub fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
                 kind: AttachmentKind::Audio,
                 title: full_title,
                 url: None,
+                thumbnail_url: None,
                 size: None,
                 subtitle: None,
             }
@@ -105,6 +133,7 @@ pub fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
                         .max_by_key(|(_, w)| *w)
                         .map(|(u, _)| u)
                 }),
+            thumbnail_url: None,
             size: None,
             subtitle: None,
         },
@@ -112,6 +141,7 @@ pub fn map_attachment(att: vk_api::Attachment) -> AttachmentInfo {
             kind: AttachmentKind::Other(other.to_string()),
             title: other.to_string(),
             url: None,
+            thumbnail_url: None,
             size: None,
             subtitle: None,
         },

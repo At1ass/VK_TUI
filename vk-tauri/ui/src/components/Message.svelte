@@ -143,7 +143,7 @@
             {#if attachment.type === 'photo' || attachment.kind === 'Photo'}
               <div class="attachment-wrapper">
                 <img
-                  src={attachment.url}
+                  src={attachment.thumbnail_url || attachment.url}
                   alt="Attachment"
                   class="attachment-image clickable"
                   loading="lazy"
