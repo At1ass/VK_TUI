@@ -10,6 +10,7 @@
 
   let forwardsOpen = false;
   let downloadingAttachments = new Set();
+  let lightboxImage = null;
 
   async function downloadAttachment(attachment) {
     if (!attachment.url) return;
@@ -139,9 +140,22 @@
       <div class="attachments">
         {#each message.attachments as attachment}
           <div class="attachment">
-            {#if attachment.type === 'photo'}
+            {#if attachment.type === 'photo' || attachment.kind === 'Photo'}
               <div class="attachment-wrapper">
-                <img src={attachment.url} alt="Attachment" class="attachment-image" />
+                <img
+                  src={attachment.url}
+                  alt="Attachment"
+                  class="attachment-image clickable"
+                  on:click={(e) => { e.stopPropagation(); lightboxImage = attachment.url; }}
+                  on:keydown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.stopPropagation();
+                      lightboxImage = attachment.url;
+                    }
+                  }}
+                  role="button"
+                  tabindex="0"
+                />
                 {#if attachment.url}
                   <button
                     class="download-btn"
@@ -156,6 +170,15 @@
                     {/if}
                   </button>
                 {/if}
+              </div>
+            {:else if attachment.type === 'sticker' || attachment.kind === 'Sticker'}
+              <div class="sticker-wrapper">
+                <img
+                  src={attachment.url}
+                  alt="Sticker"
+                  class="sticker-image"
+                  on:click={(e) => e.stopPropagation()}
+                />
               </div>
             {:else if attachment.type === 'video'}
               <div class="attachment-wrapper">
@@ -249,6 +272,32 @@
   </div>
 
 </div>
+
+{#if lightboxImage}
+  <div
+    class="lightbox-overlay"
+    role="button"
+    tabindex="0"
+    aria-label="Закрыть изображение"
+    on:click={() => (lightboxImage = null)}
+    on:keydown={(e) => {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        lightboxImage = null;
+      }
+    }}
+  >
+    <div class="lightbox-content" on:click|stopPropagation on:keydown|stopPropagation role="presentation">
+      <img src={lightboxImage} alt="Full size" class="lightbox-image" />
+      <button
+        class="lightbox-close"
+        on:click={() => (lightboxImage = null)}
+        aria-label="Закрыть"
+      >
+        ✕
+      </button>
+    </div>
+  </div>
+{/if}
 
 <style>
   .message {
@@ -456,6 +505,81 @@
     gap: 0.5rem;
     font-size: 10px;
     color: var(--muted-fg-color);
+  }
+
+  /* Clickable images */
+  .attachment-image.clickable {
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .attachment-image.clickable:hover {
+    opacity: 0.85;
+  }
+
+  /* Stickers */
+  .sticker-wrapper {
+    display: inline-block;
+    max-width: 200px;
+  }
+
+  .sticker-image {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  /* Lightbox */
+  .lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    cursor: zoom-out;
+  }
+
+  .lightbox-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .lightbox-image {
+    max-width: 100%;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: var(--radius-m);
+  }
+
+  .lightbox-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    backdrop-filter: blur(4px);
+  }
+
+  .lightbox-close:hover {
+    background: rgba(255, 255, 255, 0.3);
   }
 
 </style>

@@ -5,8 +5,12 @@
   export let loading = false;
   export let selectedChatId = null;
   export let onSelectChat;
+  export let hasMore = false;
+  export let loadingMore = false;
+  export let onLoadMore;
 
   let focusedIndex = -1;
+  let chatListEl = null;
 
   onMount(() => {
     const handleKeyDown = (e) => {
@@ -38,10 +42,27 @@
       }
     };
 
+    const handleScroll = () => {
+      if (!chatListEl || !hasMore || loadingMore) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = chatListEl;
+      const threshold = 200; // pixels from bottom
+
+      if (scrollTop + clientHeight >= scrollHeight - threshold) {
+        onLoadMore?.();
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
+    if (chatListEl) {
+      chatListEl.addEventListener('scroll', handleScroll);
+    }
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      if (chatListEl) {
+        chatListEl.removeEventListener('scroll', handleScroll);
+      }
     };
   });
 
@@ -62,7 +83,7 @@
   }
 </script>
 
-<div class="chat-list">
+<div class="chat-list" bind:this={chatListEl}>
   {#if loading}
     <div class="loading">
       <div class="spinner"></div>
@@ -92,6 +113,13 @@
         <p class="chat-preview">{truncate(chat.last_message)}</p>
       </button>
     {/each}
+
+    {#if loadingMore}
+      <div class="loading-more">
+        <div class="spinner-small"></div>
+        <span>Загрузка...</span>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -236,5 +264,24 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     line-height: 1.3;
+  }
+
+  .loading-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    color: var(--muted-fg-color);
+    font-size: 11px;
+  }
+
+  .spinner-small {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--card-bg-color);
+    border-top-color: var(--accent-bg-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 </style>

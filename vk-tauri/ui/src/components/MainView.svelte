@@ -33,6 +33,11 @@
   let searchBarVisible = false;
   let sidebarRevealed = false;
 
+  // Conversations pagination
+  let chatsOffset = 0;
+  let chatsHasMore = true;
+  let chatsLoadingMore = false;
+
   // Notification settings
   let notificationsEnabled = true;
   let mutedChats = new Set();
@@ -130,15 +135,27 @@
 
   function handleEvent(event) {
     if (event.ConversationsLoaded) {
-      const { chats: newChats, profiles } = event.ConversationsLoaded;
-      chats = newChats;
+      const { chats: newChats, profiles, has_more } = event.ConversationsLoaded;
+
+      if (chatsLoadingMore) {
+        // Append to existing chats (infinite scroll)
+        chats = [...chats, ...newChats];
+        chatsLoadingMore = false;
+      } else {
+        // Initial load
+        chats = newChats;
+        loading = false;
+      }
+
+      // Update pagination
+      chatsHasMore = has_more ?? false;
+      chatsOffset = chats.length;
 
       // Update users map
       for (const profile of profiles) {
         users[profile.id] = profile;
       }
 
-      loading = false;
       status = 'Готово';
     } else if (event.MessagesLoaded) {
       const { peer_id, messages: newMessages, profiles } = event.MessagesLoaded;
@@ -228,16 +245,28 @@
     if (vkEvent.NewMessage) {
       const { message_id, peer_id, text, from_id, timestamp } = vkEvent.NewMessage;
 
-      // Update unread counter for chat
-      const chat = chats.find(c => c.id === peer_id);
-      if (chat) {
+      // Update chat and move to top (rotation)
+      const chatIndex = chats.findIndex(c => c.id === peer_id);
+      if (chatIndex !== -1) {
+        const chat = chats[chatIndex];
+
+        // Update fields
+        chat.last_message = text;
+        chat.last_message_time = timestamp || Math.floor(Date.now() / 1000);
+
         if (!selectedChat || selectedChat.id !== peer_id) {
           chat.unread_count = (chat.unread_count || 0) + 1;
         } else {
           chat.unread_count = 0;
         }
-        chat.last_message = text;
-        chats = chats; // Trigger reactivity
+
+        // Move chat to top of the list (rotation)
+        if (chatIndex !== 0) {
+          chats.splice(chatIndex, 1); // Remove from current position
+          chats = [chat, ...chats];    // Add to beginning
+        } else {
+          chats = chats; // Trigger reactivity if already at top
+        }
       }
 
       // Add to messages if chat is selected (check for duplicates)
@@ -538,6 +567,18 @@
       }
     }
   }
+
+  async function handleLoadMoreChats() {
+    if (!chatsHasMore || chatsLoadingMore) return;
+
+    chatsLoadingMore = true;
+    try {
+      await invoke('load_conversations', { offset: chatsOffset });
+    } catch (e) {
+      console.error('Failed to load more chats:', e);
+      chatsLoadingMore = false;
+    }
+  }
 </script>
 
 <div class="main-view">
@@ -628,10 +669,13 @@
         {chats}
         {loading}
         selectedChatId={selectedChat?.id}
+        hasMore={chatsHasMore}
+        loadingMore={chatsLoadingMore}
         onSelectChat={(chat) => {
           handleChatSelect(chat);
           closeSidebar();
         }}
+        onLoadMore={handleLoadMoreChats}
       />
     </div>
 
