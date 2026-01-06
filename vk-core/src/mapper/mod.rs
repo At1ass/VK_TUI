@@ -183,6 +183,7 @@ pub fn map_forward_tree(profiles: &[User], m: &Message) -> ForwardItem {
 
     ForwardItem {
         message_id: m.id,
+        peer_id: m.peer_id,
         from: get_name(profiles, m.from_id),
         text: if m.text.is_empty() {
             "[attachment]".to_string()

@@ -580,8 +580,19 @@
     }
   }
 
-  async function handleJumpToMessage(messageId) {
-    if (!selectedChat) return;
+  async function handleJumpToMessage(messageId, peerId) {
+    // If the message is from a different chat, switch to that chat first
+    if (!selectedChat || selectedChat.id !== peerId) {
+      const targetChat = chats.find(c => c.id === peerId);
+      if (targetChat) {
+        await handleChatSelect(targetChat);
+        // Wait for chat to load
+        await tick();
+      } else {
+        console.error('Chat not found for peer_id:', peerId);
+        return;
+      }
+    }
 
     // Switch to 'around' mode and load messages around the target
     paginationMode = 'around';
@@ -593,7 +604,7 @@
 
     try {
       await invoke('load_messages_around', {
-        peerId: selectedChat.id,
+        peerId: peerId,
         messageId
       });
 
@@ -609,7 +620,7 @@
             targetElement.style.background = '';
           }, 1500);
         }
-      }, 300);
+      }, 500);
     } catch (e) {
       console.error('Failed to jump to message:', e);
     }

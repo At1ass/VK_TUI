@@ -26,7 +26,7 @@
     {#if onJumpToMessage && item.message_id}
       <button
         class="button flat jump-btn"
-        on:click={(e) => { e.stopPropagation(); onJumpToMessage(item.message_id); }}
+        on:click={(e) => { e.stopPropagation(); onJumpToMessage(item.message_id, item.peer_id); }}
         title="Перейти к сообщению"
       >
         ⤴

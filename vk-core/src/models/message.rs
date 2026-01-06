@@ -23,6 +23,7 @@ pub struct ReplyPreview {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardItem {
     pub message_id: i64,
+    pub peer_id: i64,
     pub from: String,
     pub text: String,
     pub attachments: Vec<AttachmentInfo>,
