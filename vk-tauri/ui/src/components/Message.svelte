@@ -146,6 +146,8 @@
                   src={attachment.url}
                   alt="Attachment"
                   class="attachment-image clickable"
+                  loading="lazy"
+                  decoding="async"
                   on:click={(e) => { e.stopPropagation(); lightboxImage = attachment.url; }}
                   on:keydown={(e) => {
                     if (e.key === 'Enter') {
@@ -406,7 +408,12 @@
   }
 
   .attachment-image {
-    max-width: 100%;
+    width: 100%;
+    max-width: 400px;
+    aspect-ratio: 4 / 3;
+    min-height: 200px;
+    object-fit: cover;
+    background: var(--card-bg-color);
     border-radius: var(--radius-m);
   }
 

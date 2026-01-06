@@ -35,9 +35,9 @@
     <div class="forward-attachments">
       {#each item.attachments as attachment}
         {#if (attachment.type === 'photo' || attachment.kind === 'Photo') && attachment.url}
-          <img src={attachment.url} alt="Фото" class="forward-image" />
+          <img src={attachment.url} alt="Фото" class="forward-image" loading="lazy" decoding="async" />
         {:else if (attachment.type === 'sticker' || attachment.kind === 'Sticker') && attachment.url}
-          <img src={attachment.url} alt="Стикер" class="forward-sticker" />
+          <img src={attachment.url} alt="Стикер" class="forward-sticker" loading="lazy" decoding="async" />
         {:else}
           <span class="attachment-pill">
             {attachment.title || attachment.type || attachment.kind || 'Вложение'}
@@ -136,14 +136,17 @@
   }
 
   .forward-image {
-    max-width: 150px;
-    max-height: 150px;
+    width: 150px;
+    height: 150px;
     border-radius: var(--radius-s);
     object-fit: cover;
+    background: var(--card-bg-color);
   }
 
   .forward-sticker {
-    max-width: 80px;
-    max-height: 80px;
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    background: transparent;
   }
 </style>
