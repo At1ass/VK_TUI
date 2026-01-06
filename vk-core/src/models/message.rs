@@ -22,6 +22,7 @@ pub struct ReplyPreview {
 /// A forwarded message item (can be nested).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardItem {
+    pub message_id: i64,
     pub from: String,
     pub text: String,
     pub attachments: Vec<AttachmentInfo>,

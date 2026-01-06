@@ -579,6 +579,41 @@
       chatsLoadingMore = false;
     }
   }
+
+  async function handleJumpToMessage(messageId) {
+    if (!selectedChat) return;
+
+    // Switch to 'around' mode and load messages around the target
+    paginationMode = 'around';
+    hasMoreOlder = true;
+    hasMoreNewer = true;
+    pendingLoadDirection = 'replace';
+    paginationAnchorId = null;
+    paginationOffset = 0;
+
+    try {
+      await invoke('load_messages_around', {
+        peerId: selectedChat.id,
+        messageId
+      });
+
+      // Wait a bit for messages to load and render, then scroll to target
+      setTimeout(() => {
+        const targetElement = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Briefly highlight the message
+          targetElement.style.transition = 'background 0.5s';
+          targetElement.style.background = 'rgba(53, 132, 228, 0.2)';
+          setTimeout(() => {
+            targetElement.style.background = '';
+          }, 1500);
+        }
+      }, 300);
+    } catch (e) {
+      console.error('Failed to jump to message:', e);
+    }
+  }
 </script>
 
 <div class="main-view">
@@ -700,6 +735,7 @@
         autoScroll={paginationMode === 'latest'}
         isMuted={mutedChats.has(selectedChat.id)}
         onToggleMute={() => toggleChatMute(selectedChat.id)}
+        onJumpToMessage={handleJumpToMessage}
       />
     {:else}
       <div class="empty-state">

@@ -18,6 +18,7 @@
   export let autoScroll = true;
   export let isMuted = false;
   export let onToggleMute = () => {};
+  export let onJumpToMessage = null;
 
   let messagesContainer;
   let replyTo = null;
@@ -323,6 +324,7 @@
           isSelected={selectionState.get(message.id) ?? false}
           onSelect={selectMessage}
           onContextMenu={openContextMenu}
+          {onJumpToMessage}
         />
       {/each}
     {/if}

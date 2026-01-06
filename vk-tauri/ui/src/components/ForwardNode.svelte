@@ -1,6 +1,7 @@
 <script>
   export let item;
   export let level = 0;
+  export let onJumpToMessage = null;
 
   export let defaultOpen = false;
   let open = defaultOpen;
@@ -22,6 +23,15 @@
       {/if}
     </button>
     <span class="author">{item.from}</span>
+    {#if onJumpToMessage && item.message_id}
+      <button
+        class="button flat jump-btn"
+        on:click={(e) => { e.stopPropagation(); onJumpToMessage(item.message_id); }}
+        title="Перейти к сообщению"
+      >
+        ⤴
+      </button>
+    {/if}
     {#if item.nested && item.nested.length > 0}
       <button class="button flat toggle-label" on:click={toggle}>
         {open ? 'Свернуть' : 'Развернуть'}
@@ -54,7 +64,7 @@
   {#if open && item.nested && item.nested.length > 0}
     <div class="forward-children">
       {#each item.nested as child}
-        <svelte:self item={child} level={level + 1} defaultOpen={false} />
+        <svelte:self item={child} level={level + 1} defaultOpen={false} {onJumpToMessage} />
       {/each}
     </div>
     <button class="button flat forward-summary" on:click={toggle}>
@@ -104,6 +114,18 @@
 
   .author {
     font-weight: 600;
+    flex: 1;
+  }
+
+  .jump-btn {
+    font-size: 14px;
+    color: var(--accent-bg-color);
+    padding: 0 0.2rem;
+    min-width: auto;
+  }
+
+  .jump-btn:hover {
+    background: var(--row-hover-bg-color);
   }
 
   .forward-text {

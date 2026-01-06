@@ -6,6 +6,7 @@
   export let users = {};
   export let onSelect;
   export let onContextMenu;
+  export let onJumpToMessage = null;
   export let isSelected = false;
 
   let forwardsOpen = false;
@@ -254,7 +255,7 @@
         {#if forwardsOpen}
           <div class="forwards-tree">
             {#each message.forwards as item}
-              <ForwardNode item={item} level={0} defaultOpen={false} />
+              <ForwardNode item={item} level={0} defaultOpen={false} {onJumpToMessage} />
             {/each}
           </div>
         {/if}
