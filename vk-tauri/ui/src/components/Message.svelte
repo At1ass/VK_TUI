@@ -25,7 +25,16 @@
       // Generate unique filename with timestamp and type
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
       const type = attachment.type || 'file';
-      const baseFilename = attachment.title || `${type}_${timestamp}`;
+
+      // Check if title is generic (like "Photo", "Video") - use timestamp instead
+      const hasGenericTitle = !attachment.title ||
+                              attachment.title === 'Photo' ||
+                              attachment.title === 'Video' ||
+                              attachment.title === 'Audio';
+
+      const baseFilename = hasGenericTitle
+        ? `${type}_${timestamp}`
+        : attachment.title;
 
       // Remove extension from title if present, then add correct one
       const filenameWithoutExt = baseFilename.replace(/\.[^.]+$/, '');
@@ -35,9 +44,12 @@
         url: attachment.url,
         filename
       });
-      console.log('Downloaded to:', savedPath);
+
+      // Show notification about successful download
+      alert(`✓ Файл сохранён:\n${savedPath}`);
     } catch (e) {
       console.error('Failed to download:', e);
+      alert(`✗ Ошибка при скачивании:\n${e}`);
     } finally {
       downloadingAttachments.delete(id);
       downloadingAttachments = new Set(downloadingAttachments);

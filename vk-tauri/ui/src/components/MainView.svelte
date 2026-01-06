@@ -33,7 +33,50 @@
   let searchBarVisible = false;
   let sidebarRevealed = false;
 
+  // Notification settings
+  let notificationsEnabled = true;
+  let mutedChats = new Set();
+
+  // Load muted chats from localStorage
+  try {
+    const saved = localStorage.getItem('mutedChats');
+    if (saved) {
+      mutedChats = new Set(JSON.parse(saved));
+    }
+  } catch (e) {
+    console.error('Failed to load muted chats:', e);
+  }
+
+  // Save muted chats to localStorage
+  function saveMutedChats() {
+    try {
+      localStorage.setItem('mutedChats', JSON.stringify(Array.from(mutedChats)));
+    } catch (e) {
+      console.error('Failed to save muted chats:', e);
+    }
+  }
+
+  function toggleNotifications() {
+    notificationsEnabled = !notificationsEnabled;
+    localStorage.setItem('notificationsEnabled', String(notificationsEnabled));
+  }
+
+  function toggleChatMute(chatId) {
+    if (mutedChats.has(chatId)) {
+      mutedChats.delete(chatId);
+    } else {
+      mutedChats.add(chatId);
+    }
+    mutedChats = mutedChats; // Trigger reactivity
+    saveMutedChats();
+  }
+
   onMount(async () => {
+    // Load notification settings
+    const savedNotifPref = localStorage.getItem('notificationsEnabled');
+    if (savedNotifPref !== null) {
+      notificationsEnabled = savedNotifPref === 'true';
+    }
     try {
       // Load conversations
       loading = true;
@@ -522,6 +565,20 @@
     <div class="headerbar-end">
       <button
         class="button flat icon-button"
+        on:click={toggleNotifications}
+        title={notificationsEnabled ? "Отключить уведомления" : "Включить уведомления"}
+        aria-label="Уведомления"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          {#if notificationsEnabled}
+            <path d="M8 2C6.34 2 5 3.34 5 5v3L3 10v1h10v-1l-2-2V5c0-1.66-1.34-3-3-3zm1 11H7c0 .55.45 1 1 1s1-.45 1-1z"/>
+          {:else}
+            <path d="M8 2C6.34 2 5 3.34 5 5v3L3 10v1h10v-1l-2-2V5c0-1.66-1.34-3-3-3zm1 11H7c0 .55.45 1 1 1s1-.45 1-1zM2 2l12 12-1 1L1 3z"/>
+          {/if}
+        </svg>
+      </button>
+      <button
+        class="button flat icon-button"
         on:click={toggleSearchBar}
         title="Поиск (Ctrl+F)"
         aria-label="Поиск"
@@ -597,6 +654,8 @@
         canLoadOlder={hasMoreOlder}
         canLoadNewer={hasMoreNewer}
         autoScroll={paginationMode === 'latest'}
+        isMuted={mutedChats.has(selectedChat.id)}
+        onToggleMute={() => toggleChatMute(selectedChat.id)}
       />
     {:else}
       <div class="empty-state">

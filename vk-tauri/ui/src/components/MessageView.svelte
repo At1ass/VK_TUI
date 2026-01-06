@@ -16,6 +16,8 @@
   export let canLoadOlder = false;
   export let canLoadNewer = false;
   export let autoScroll = true;
+  export let isMuted = false;
+  export let onToggleMute = () => {};
 
   let messagesContainer;
   let replyTo = null;
@@ -331,6 +333,23 @@
       <span>Выбрано: {selectedIds.size}</span>
       <button class="button flat" on:click={clearSelection}>Снять выделение</button>
     </div>
+  {:else if chat}
+    <div class="chat-controls">
+      <button
+        class="button flat icon-text-button"
+        on:click={onToggleMute}
+        title={isMuted ? "Включить уведомления для этого чата" : "Отключить уведомления для этого чата"}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          {#if isMuted}
+            <path d="M8 2C6.34 2 5 3.34 5 5v3L3 10v1h10v-1l-2-2V5c0-1.66-1.34-3-3-3zm1 11H7c0 .55.45 1 1 1s1-.45 1-1zM2 2l12 12-1 1L1 3z"/>
+          {:else}
+            <path d="M8 2C6.34 2 5 3.34 5 5v3L3 10v1h10v-1l-2-2V5c0-1.66-1.34-3-3-3zm1 11H7c0 .55.45 1 1 1s1-.45 1-1z"/>
+          {/if}
+        </svg>
+        <span>{isMuted ? "Включить уведомления" : "Отключить уведомления"}</span>
+      </button>
+    </div>
   {/if}
 
   <MessageInput
@@ -449,6 +468,27 @@
     background: var(--card-bg-color);
     border-top: 1px solid var(--border-color);
     font-size: 12px;
+  }
+
+  .chat-controls {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    padding: 0.3rem 0.75rem;
+    background: var(--view-bg-color);
+    border-top: 1px solid var(--border-color);
+  }
+
+  .icon-text-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 11px;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .icon-text-button svg {
+    flex-shrink: 0;
   }
 
   .context-menu {

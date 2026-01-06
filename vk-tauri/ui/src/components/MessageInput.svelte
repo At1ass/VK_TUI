@@ -31,27 +31,48 @@
 
   async function handleDrop(e) {
     e.preventDefault();
+    e.stopPropagation();
     isDragging = false;
 
-    if (!peerId) return;
+    if (!peerId) {
+      console.error('No peer selected');
+      return;
+    }
 
     const files = Array.from(e.dataTransfer.files);
+    console.log('Dropped files:', files);
+
+    if (files.length === 0) {
+      console.error('No files in drop event');
+      return;
+    }
 
     for (const file of files) {
-      const path = file.path;
-      if (!path) continue;
+      // In Tauri, file.path should be available
+      const path = file.path || file.name;
+      console.log('File path:', path, 'type:', file.type);
+
+      if (!path) {
+        console.error('File has no path:', file);
+        continue;
+      }
 
       const isImage = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type);
 
       try {
         uploading = true;
+        console.log('Sending file:', path, 'as', isImage ? 'photo' : 'doc');
+
         if (isImage) {
           await invoke('send_photo', { peerId, path });
         } else {
           await invoke('send_doc', { peerId, path });
         }
-      } catch (e) {
-        console.error('Failed to send file:', e);
+
+        console.log('File sent successfully');
+      } catch (err) {
+        console.error('Failed to send file:', err);
+        alert(`Ошибка отправки файла: ${err}`);
       } finally {
         uploading = false;
       }
